@@ -13,8 +13,35 @@ import {
     Copy,
     Check,
     RotateCw,
+    Sparkles,
+    Settings,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
+
+const TRUSTED_META_ORIGINS = new Set([
+    'https://www.facebook.com',
+    'https://web.facebook.com',
+]);
+
+declare global {
+    interface Window {
+        FB?: {
+            init: (options: Record<string, unknown>) => void;
+            login: (
+                callback: (response: {
+                    status?: string;
+                    authResponse?: {
+                        code?: string;
+                        [key: string]: unknown;
+                    };
+                    [key: string]: unknown;
+                }) => void,
+                options: Record<string, unknown>
+            ) => void;
+        };
+        fbAsyncInit?: () => void;
+    }
+}
 
 interface WhatsAppLinkModalProps {
     open: boolean;
@@ -27,11 +54,20 @@ export default function WhatsAppLinkModal({
     onClose,
     onSuccess,
 }: WhatsAppLinkModalProps) {
-    const [step, setStep] = useState<'loading' | 'send_message' | 'confirm' | 'success'>('loading');
+    const metaAppId = process.env.NEXT_PUBLIC_META_APP_ID || '';
+    const configId = process.env.NEXT_PUBLIC_WHATSAPP_CONFIG_ID || '';
+    const isMetaConfigured = Boolean(metaAppId && configId);
+
+    const [step, setStep] = useState<
+        'embedded_signup' | 'config_advisory' | 'loading' | 'send_message' | 'confirm' | 'success' | 'error'
+    >('embedded_signup');
+    const [sdkLoaded, setSdkLoaded] = useState(false);
+    const [sdkReady, setSdkReady] = useState(false);
+    const [isLaunchingMeta, setIsLaunchingMeta] = useState(false);
     const [token, setToken] = useState('');
     const [waDirectUrl, setWaDirectUrl] = useState('');
     const [linkingMessage, setLinkingMessage] = useState('');
-    const [businessPhone, setBusinessPhone] = useState('');
+    const [, setBusinessPhone] = useState('');
     const [maskedPhone, setMaskedPhone] = useState('');
     const [challengeId, setChallengeId] = useState('');
     const [orderUpdatesOptIn, setOrderUpdatesOptIn] = useState(true);
@@ -41,6 +77,7 @@ export default function WhatsAppLinkModal({
     const [copied, setCopied] = useState(false);
 
     const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const latestSessionRef = useRef<{ wabaId?: string | null; phoneNumberId?: string | null; eventType?: string | null }>({});
 
     const stopPolling = useCallback(() => {
         if (pollingIntervalRef.current) {
@@ -49,7 +86,176 @@ export default function WhatsAppLinkModal({
         }
     }, []);
 
-    // 1. Initiate linking challenge from server
+    // 1. Initialize Meta / Facebook SDK for Embedded Signup
+    const initFacebookSdk = useCallback(() => {
+        if (!metaAppId) return;
+
+        if (typeof window !== 'undefined' && window.FB) {
+            try {
+                window.FB.init({
+                    appId: metaAppId,
+                    cookie: true,
+                    xfbml: true,
+                    version: 'v26.0',
+                });
+                setSdkReady(true);
+            } catch (err) {
+                console.error('[WhatsAppLinkModal] FB.init error:', err);
+            }
+        }
+    }, [metaAppId]);
+
+    // Load Meta SDK dynamically when modal is open and Meta is configured
+    useEffect(() => {
+        if (!open) return;
+
+        if (!isMetaConfigured) {
+            setStep('config_advisory');
+            return;
+        }
+
+        setStep('embedded_signup');
+
+        if (typeof window !== 'undefined') {
+            window.fbAsyncInit = function () {
+                initFacebookSdk();
+            };
+
+            if (window.FB) {
+                setSdkLoaded(true);
+                initFacebookSdk();
+                return;
+            }
+
+            if (!document.getElementById('meta-fb-jssdk')) {
+                const script = document.createElement('script');
+                script.id = 'meta-fb-jssdk';
+                script.src = 'https://connect.facebook.net/en_US/sdk.js';
+                script.async = true;
+                script.defer = true;
+                script.onload = () => {
+                    setSdkLoaded(true);
+                    initFacebookSdk();
+                };
+                script.onerror = () => {
+                    console.warn('[WhatsAppLinkModal] Meta SDK script could not be loaded from connect.facebook.net');
+                };
+                document.body.appendChild(script);
+            }
+        }
+    }, [open, isMetaConfigured, initFacebookSdk]);
+
+    // Listen for Meta postMessage events during Embedded Signup
+    useEffect(() => {
+        if (!open) return;
+
+        const handleMessage = (event: MessageEvent) => {
+            if (!TRUSTED_META_ORIGINS.has(event.origin)) return;
+
+            let parsed: any = null;
+            try {
+                parsed = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+            } catch {
+                return;
+            }
+
+            if (!parsed || parsed.type !== 'WA_EMBEDDED_SIGNUP') return;
+
+            const eventType = parsed.event || 'UNKNOWN_EVENT';
+            const eventData = parsed.data || {};
+            const wabaId = eventData.waba_id || null;
+            const phoneNumberId = eventData.phone_number_id || null;
+
+            latestSessionRef.current = { wabaId, phoneNumberId, eventType };
+        };
+
+        window.addEventListener('message', handleMessage);
+        return () => window.removeEventListener('message', handleMessage);
+    }, [open]);
+
+    // 2. Launch Meta Embedded Signup for Coexistence
+    const handleLaunchMetaSignup = () => {
+        if (!isMetaConfigured) {
+            setError('Meta Embedded Signup configuration is missing.');
+            return;
+        }
+
+        if (!window.FB) {
+            setError('Facebook SDK is loading. Please wait a moment and try again.');
+            return;
+        }
+
+        setIsLaunchingMeta(true);
+        setError(null);
+
+        window.FB.login(
+            function (response) {
+                setIsLaunchingMeta(false);
+
+                if (response?.authResponse?.code) {
+                    const authCode = response.authResponse.code;
+                    sendMetaCodeToServer(authCode, latestSessionRef.current);
+                } else {
+                    console.info('[WhatsAppLinkModal] User dismissed or cancelled Meta dialog.');
+                }
+            },
+            {
+                config_id: configId,
+                response_type: 'code',
+                override_default_response_type: true,
+                extras: {
+                    setup: {},
+                    featureType: 'whatsapp_business_app_onboarding',
+                },
+            }
+        );
+    };
+
+    // 3. Send authorization code to server callback
+    const sendMetaCodeToServer = async (
+        authCode: string,
+        sessionInfo?: { wabaId?: string | null; phoneNumberId?: string | null; eventType?: string | null }
+    ) => {
+        setLoading(true);
+        setError(null);
+
+        try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            const authToken = sessionData?.session?.access_token;
+            if (!authToken) {
+                throw new Error('Please sign in to connect WhatsApp.');
+            }
+
+            const res = await fetch('/api/whatsapp/embedded-signup/callback', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${authToken}`,
+                },
+                body: JSON.stringify({
+                    code: authCode,
+                    wabaId: sessionInfo?.wabaId || latestSessionRef.current.wabaId || null,
+                    phoneNumberId: sessionInfo?.phoneNumberId || latestSessionRef.current.phoneNumberId || null,
+                    eventType: sessionInfo?.eventType || latestSessionRef.current.eventType || null,
+                }),
+            });
+
+            const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data.error || 'Server could not complete Meta WhatsApp connection.');
+            }
+
+            setStep('success');
+            onSuccess();
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Failed to finalize WhatsApp connection.';
+            setError(msg);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // 4. Fallback customer linking challenge
     const initiateChallenge = useCallback(async () => {
         setLoading(true);
         setError(null);
@@ -87,6 +293,7 @@ export default function WhatsAppLinkModal({
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Error starting WhatsApp linking.';
             setError(msg);
+            setStep('error');
         } finally {
             setLoading(false);
         }
@@ -119,15 +326,6 @@ export default function WhatsAppLinkModal({
         }
     }, [stopPolling]);
 
-    useEffect(() => {
-        if (open) {
-            initiateChallenge();
-        } else {
-            stopPolling();
-        }
-        return () => stopPolling();
-    }, [open, initiateChallenge, stopPolling]);
-
     // Countdown timer for 5-minute TTL
     useEffect(() => {
         if (step !== 'send_message' && step !== 'confirm') return;
@@ -154,7 +352,7 @@ export default function WhatsAppLinkModal({
         return () => stopPolling();
     }, [step, secondsLeft, checkStatus, stopPolling]);
 
-    // Confirm connection
+    // Confirm connection for verification message flow
     const handleConfirm = async () => {
         setLoading(true);
         setError(null);
@@ -222,7 +420,7 @@ export default function WhatsAppLinkModal({
                 className="modal-content card"
                 style={{
                     width: '100%',
-                    maxWidth: '460px',
+                    maxWidth: '480px',
                     borderRadius: '16px',
                     overflow: 'hidden',
                     background: 'var(--bg)',
@@ -294,15 +492,169 @@ export default function WhatsAppLinkModal({
                         </div>
                     )}
 
-                    {step === 'loading' && (
-                        <div style={{ padding: '36px 0', textAlign: 'center' }}>
-                            <div className="spinner" style={{ width: '28px', height: '28px', margin: '0 auto 14px auto' }} />
-                            <p style={{ fontSize: '14px', color: 'var(--fg-muted)', margin: 0 }}>
-                                Generating secure WhatsApp challenge...
+                    {/* Step: Meta Embedded Signup (Primary Coexistence Flow) */}
+                    {step === 'embedded_signup' && (
+                        <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                <Sparkles size={16} color="#16a34a" />
+                                <span style={{ fontSize: '13px', fontWeight: '800', color: '#16a34a', textTransform: 'uppercase' }}>
+                                    Meta WhatsApp Coexistence
+                                </span>
+                            </div>
+                            <p style={{ fontSize: '14px', color: 'var(--fg-muted)', lineHeight: '1.5', margin: '0 0 16px 0' }}>
+                                Connect your existing WhatsApp Business App number to XerService. Meta’s official Embedded Signup pairs your business number with Cloud API while keeping your mobile WhatsApp Business app active.
+                            </p>
+
+                            <div
+                                style={{
+                                    padding: '14px',
+                                    borderRadius: '10px',
+                                    background: 'var(--bg-secondary)',
+                                    border: '1px solid var(--border)',
+                                    marginBottom: '20px',
+                                    fontSize: '12px',
+                                    lineHeight: '1.6',
+                                    color: 'var(--fg-muted)',
+                                }}
+                            >
+                                <div style={{ fontWeight: '700', color: 'var(--fg)', marginBottom: '4px' }}>
+                                    How it works:
+                                </div>
+                                <div>1. Click below to open Meta’s secure login modal.</div>
+                                <div>2. Select your WhatsApp Business App phone number.</div>
+                                <div>3. Authorization is securely exchanged on the server.</div>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={handleLaunchMetaSignup}
+                                disabled={isLaunchingMeta || loading}
+                                className="btn btn-accent"
+                                style={{
+                                    width: '100%',
+                                    padding: '14px',
+                                    borderRadius: '10px',
+                                    background: '#16a34a',
+                                    borderColor: '#16a34a',
+                                    color: '#ffffff',
+                                    fontWeight: '800',
+                                    fontSize: '15px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '10px',
+                                    cursor: isLaunchingMeta || loading ? 'not-allowed' : 'pointer',
+                                    boxShadow: '0 4px 14px rgba(22, 163, 74, 0.3)',
+                                }}
+                            >
+                                <MessageCircle size={18} />
+                                <span>
+                                    {isLaunchingMeta
+                                        ? 'Opening Meta Signup...'
+                                        : loading
+                                        ? 'Connecting...'
+                                        : !sdkReady && !sdkLoaded
+                                        ? 'Loading Meta SDK...'
+                                        : 'Connect with WhatsApp'}
+                                </span>
+                            </button>
+
+                            <p style={{ fontSize: '11px', color: 'var(--fg-subtle)', textAlign: 'center', marginTop: '12px', marginBottom: 0 }}>
+                                Powered by Meta WhatsApp Cloud API. No phone number configuration required prior to signup.
                             </p>
                         </div>
                     )}
 
+                    {/* Step: Configuration Advisory (When Meta App ID or Config ID are not configured) */}
+                    {step === 'config_advisory' && (
+                        <div>
+                            <div
+                                style={{
+                                    padding: '16px',
+                                    borderRadius: '12px',
+                                    background: 'rgba(234, 179, 8, 0.08)',
+                                    border: '1px solid rgba(234, 179, 8, 0.25)',
+                                    marginBottom: '16px',
+                                }}
+                            >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                    <Settings size={16} color="#eab308" />
+                                    <strong style={{ fontSize: '13px', color: '#eab308' }}>
+                                        Meta Embedded Signup Configuration Required
+                                    </strong>
+                                </div>
+                                <p style={{ fontSize: '13px', color: 'var(--fg)', margin: '0 0 10px 0', lineHeight: '1.5' }}>
+                                    To enable WhatsApp Business App + Cloud API Coexistence, configure the following variables in your Vercel Project Settings:
+                                </p>
+                                <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--fg-muted)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <div>• <code>NEXT_PUBLIC_META_APP_ID</code></div>
+                                    <div>• <code>NEXT_PUBLIC_WHATSAPP_CONFIG_ID</code></div>
+                                    <div>• <code>META_APP_SECRET</code></div>
+                                    <div>• <code>WHATSAPP_ACCESS_TOKEN</code></div>
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                <button
+                                    type="button"
+                                    onClick={initiateChallenge}
+                                    className="btn btn-outline"
+                                    style={{ width: '100%', padding: '12px', fontSize: '13px', fontWeight: '700' }}
+                                >
+                                    Try Message-Based Linking Challenge
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={onClose}
+                                    className="btn btn-ghost"
+                                    style={{ width: '100%', padding: '10px', fontSize: '13px' }}
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Step: Error state */}
+                    {step === 'error' && (
+                        <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                            <p style={{ fontSize: '13px', color: 'var(--fg-muted)', marginBottom: '16px' }}>
+                                WhatsApp connection could not be initiated with the current configuration.
+                            </p>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                {isMetaConfigured && (
+                                    <button
+                                        type="button"
+                                        onClick={() => { setError(null); setStep('embedded_signup'); }}
+                                        className="btn btn-accent"
+                                        style={{ flex: 1, padding: '10px' }}
+                                    >
+                                        Try Meta Embedded Signup
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={onClose}
+                                    className="btn btn-outline"
+                                    style={{ flex: 1, padding: '10px' }}
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Step: Loading */}
+                    {step === 'loading' && (
+                        <div style={{ padding: '36px 0', textAlign: 'center' }}>
+                            <div className="spinner" style={{ width: '28px', height: '28px', margin: '0 auto 14px auto' }} />
+                            <p style={{ fontSize: '14px', color: 'var(--fg-muted)', margin: 0 }}>
+                                Initializing secure WhatsApp connection...
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Step: Send Message Challenge */}
                     {step === 'send_message' && (
                         <div>
                             <p style={{ fontSize: '14px', color: 'var(--fg-muted)', lineHeight: '1.5', margin: '0 0 16px 0' }}>
@@ -433,6 +785,7 @@ export default function WhatsAppLinkModal({
                         </div>
                     )}
 
+                    {/* Step: Confirm Connection */}
                     {step === 'confirm' && (
                         <div>
                             <div
@@ -486,6 +839,7 @@ export default function WhatsAppLinkModal({
                         </div>
                     )}
 
+                    {/* Step: Success */}
                     {step === 'success' && (
                         <div style={{ textAlign: 'center', padding: '16px 0' }}>
                             <div
