@@ -1,33 +1,50 @@
 'use client';
 
+import { notify } from '@/components/ui/Feedback';
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { Order, mockOrders } from '@/lib/mock-data';
+import type { Order, CustomerOrder } from '@/types/orders';
+import type { PrintDocument } from '@/lib/print-order';
+import { supabase } from '@/lib/supabase/client';
 
-export type UserType = 'customer' | 'vendor' | 'admin';
+export type UserType = 'customer' | 'vendor' | 'admin' | 'unverified';
 
 export interface User {
+    id: string;
     mobile: string;
     email?: string;
     name: string;
     avatarUrl?: string;
+    whatsappLinkStatus?: 'not_linked' | 'pending' | 'linked';
+    whatsappLinkedMobile?: string;
     type: UserType;
     xerCoins: number;
-    badges: string[];
 }
 
+const CART_EXPIRY_MS = 12 * 60 * 60 * 1000;
+
 interface CartItem {
+    orderId?: string;
+    orderNumber?: string;
+    documents?: PrintDocument[];
     shopId: string;
     shopName: string;
     fileName: string;
+    fileNames?: string[];
     pages: number;
     color: boolean;
     sides: 'single' | 'double' | 'double_long' | 'double_short';
     orientation: 'portrait' | 'landscape';
     copies: number;
     totalAmount: number;
+    createdAt: string;
+    source?: 'upload' | 'whatsapp';
 }
 
 interface OrderState {
+    orderId?: string;
+    orderNumber?: string;
+    editingCartCreatedAt?: string;
+    documents?: PrintDocument[];
     shopId: string;
     shopName: string;
     file: File | null;
@@ -42,6 +59,7 @@ interface OrderState {
     copies: number;
     method: 'instant' | 'scheduled';
     scheduledTime: string;
+    uploadedAt: string;
     totalAmount: number;
     paymentMethod: 'upi' | 'card' | 'wallet';
 }
@@ -49,8 +67,10 @@ interface OrderState {
 interface AppContextType {
     user: User | null;
     isLoggedIn: boolean;
-    login: (mobile: string, name: string, type: UserType) => void;
-    logout: () => void;
+    authInitialized: boolean;
+    isAuthLoading: boolean;
+    login: (mobile: string, name: string, type: UserType, data?: Partial<Pick<User, 'id' | 'email' | 'avatarUrl'>>) => void;
+    logout: () => Promise<void> | void;
     orders: Order[];
     addOrder: (order: Order) => void;
     currentOrder: OrderState;
@@ -58,23 +78,25 @@ interface AppContextType {
     lastOrderId: string;
     setLastOrderId: (id: string) => void;
     cart: CartItem[];
-    addToCart: (item: CartItem) => void;
+    addToCart: (item: Omit<CartItem, 'createdAt'> & Partial<Pick<CartItem, 'createdAt'>>) => void;
     removeFromCart: (idx: number) => void;
     isLoading: boolean;
     theme: 'light' | 'dark';
     toggleTheme: () => void;
-    updateProfile: (data: Partial<User>) => void;
+    updateProfile: (data: Partial<User>) => Promise<void> | void;
     addXerCoins: (amount: number) => boolean;
     setXerCoinsBalance: (balance: number) => boolean;
-    activity: Record<string, number>;
-    streak: number;
-    totalActiveDays: number;
+    refreshProfile: () => Promise<void>;
+    refreshOrders: () => Promise<void>;
+    refreshWallet: () => Promise<void>;
 }
 
 const defaultOrder: OrderState = {
+    documents: [],
     shopId: '', shopName: '', file: null, files: [], totalFiles: 0, totalEstimatedPages: 0, fileName: '',
     pages: 1, color: false, sides: 'single', orientation: 'portrait',
-    copies: 1, method: 'instant', scheduledTime: '', totalAmount: 0,
+    copies: 1, method: 'instant', scheduledTime: '', uploadedAt: '',
+    totalAmount: 0,
     paymentMethod: 'upi',
 };
 
@@ -82,121 +104,330 @@ const AppContext = createContext<AppContextType | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
-    const [orders, setOrders] = useState<Order[]>(mockOrders);
+    const [orders, setOrders] = useState<Order[]>([]);
     const [currentOrder, setCurrentOrder] = useState<OrderState>(defaultOrder);
     const [lastOrderId, setLastOrderId] = useState('');
     const [cart, setCart] = useState<CartItem[]>([]);
+    const [cartReady, setCartReady] = useState(false);
+    const [cartOwner, setCartOwner] = useState<string | null>(null);
+    const [authInitialized, setAuthInitialized] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [theme, setTheme] = useState<'light' | 'dark'>('light');
-    const [activity, setActivity] = useState<Record<string, number>>({});
+    const [themeReady, setThemeReady] = useState(false);
 
-    const dateKey = (date: Date) => {
-        const y = date.getFullYear();
-        const m = String(date.getMonth() + 1).padStart(2, '0');
-        const d = String(date.getDate()).padStart(2, '0');
-        return `${y}-${m}-${d}`;
-    };
-
-    const activityStorageKey = (mobile: string) => `xer_activity_${mobile}`;
-
-    const loadActivity = useCallback((mobile: string): Record<string, number> => {
-        try {
-            const raw = localStorage.getItem(activityStorageKey(mobile));
-            if (!raw) return {};
-            const parsed = JSON.parse(raw);
-            if (!parsed || typeof parsed !== 'object') return {};
-            const clean: Record<string, number> = {};
-            Object.entries(parsed).forEach(([k, v]) => {
-                const count = Number(v);
-                if (/^\d{4}-\d{2}-\d{2}$/.test(k) && Number.isFinite(count) && count > 0) {
-                    clean[k] = Math.min(4, Math.max(1, Math.round(count)));
-                }
-            });
-            return clean;
-        } catch {
-            return {};
-        }
-    }, []);
-
-    const computeStreak = (map: Record<string, number>): number => {
-        let streakDays = 0;
-        const cursor = new Date();
-        while (true) {
-            const key = dateKey(cursor);
-            if (!map[key]) break;
-            streakDays += 1;
-            cursor.setDate(cursor.getDate() - 1);
-        }
-        return streakDays;
-    };
-
-    // Load theme
+    // The head script restores the theme before the first paint.
     useEffect(() => {
-        const saved = localStorage.getItem('xer_theme');
-        if (saved === 'dark') setTheme('dark');
-        else if (saved === 'light') setTheme('light');
-        else if (window.matchMedia('(prefers-color-scheme: dark)').matches) setTheme('dark');
+        setTheme(document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+        setThemeReady(true);
     }, []);
 
     // Apply theme
     useEffect(() => {
-        if (theme === 'dark') document.documentElement.classList.add('dark');
-        else document.documentElement.classList.remove('dark');
-        localStorage.setItem('xer_theme', theme);
-    }, [theme]);
+        if (!themeReady) return;
+        document.documentElement.classList.toggle('dark', theme === 'dark');
+        document.documentElement.style.colorScheme = theme;
+        try { localStorage.setItem('xer_theme', theme); } catch { }
+    }, [theme, themeReady]);
 
-    const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
-
-    // Simulate loading screen
-    useEffect(() => {
-        const timer = setTimeout(() => setIsLoading(false), 2000);
-        return () => clearTimeout(timer);
-    }, []);
-
-    // Restore session
-    useEffect(() => {
-        try {
-            const saved = localStorage.getItem('xer_user');
-            if (saved) setUser(JSON.parse(saved));
-        } catch { }
-    }, []);
-
-    useEffect(() => {
-        if (!user?.mobile) {
-            setActivity({});
-            return;
+    const toggleTheme = () => {
+        if (typeof document !== 'undefined' && 'startViewTransition' in document) {
+            (document as any).startViewTransition(() => {
+                setTheme(prev => prev === 'light' ? 'dark' : 'light');
+            });
+        } else {
+            setTheme(prev => prev === 'light' ? 'dark' : 'light');
         }
-        const current = loadActivity(user.mobile);
-        const today = dateKey(new Date());
-        const next = { ...current, [today]: Math.min(4, (current[today] || 0) + 1) };
-        localStorage.setItem(activityStorageKey(user.mobile), JSON.stringify(next));
-        setActivity(next);
-    }, [user?.mobile, loadActivity]);
-
-    const login = (mobile: string, name: string, type: UserType) => {
-        const newUser: User = {
-            mobile, name, type,
-            xerCoins: type === 'customer' ? 250 : 0,
-            badges: type === 'customer' ? ['contributor'] : [],
-        };
-        setUser(newUser);
-        localStorage.setItem('xer_user', JSON.stringify(newUser));
     };
 
-    const logout = () => {
+    const fetchProfile = async (userId: string, authUser?: any): Promise<User> => {
+        try {
+            const { data: profile, error } = await supabase
+                .from('profiles')
+                .select('id, user_id, full_name, phone, avatar_url, role')
+                .eq('user_id', userId)
+                .maybeSingle();
+
+            if (error) {
+                console.warn('[AppContext] Supabase profile fetch error:', error.message);
+            }
+
+            const role: UserType = !error && ['customer', 'vendor', 'admin'].includes(profile?.role) ? profile!.role : 'unverified';
+            const name = profile?.full_name || authUser?.user_metadata?.full_name || (authUser?.email ? authUser.email.split('@')[0] : '') || (authUser?.phone ? `User (${authUser.phone.slice(-4)})` : 'Customer');
+            const mobile = profile?.phone || authUser?.phone || '';
+            const email = (profile as any)?.email || authUser?.email || '';
+            const avatarUrl = profile?.avatar_url || authUser?.user_metadata?.avatar_url || '';
+
+            return {
+                id: userId,
+                name,
+                email,
+                mobile,
+                avatarUrl,
+                type: role,
+                xerCoins: 0,
+                whatsappLinkStatus: 'not_linked',
+            };
+        } catch (err) {
+            console.error('[AppContext] Failed to load profile:', err);
+            return {
+                id: userId,
+                name: authUser?.user_metadata?.full_name || (authUser?.email ? authUser.email.split('@')[0] : '') || (authUser?.phone ? `User (${authUser.phone.slice(-4)})` : 'Customer'),
+                email: authUser?.email || '',
+                mobile: authUser?.phone || '',
+                avatarUrl: authUser?.user_metadata?.avatar_url || '',
+                type: 'unverified',
+                xerCoins: 0,
+                whatsappLinkStatus: 'not_linked',
+            };
+        }
+    };
+
+    const fetchWalletBalance = useCallback(async (token?: string): Promise<number> => {
+        try {
+            let authToken = token;
+            if (!authToken) {
+                const { data: { session } } = await supabase.auth.getSession();
+                authToken = session?.access_token;
+            }
+            if (!authToken) return 0;
+
+            const res = await fetch('/api/customer/wallet', {
+                headers: { Authorization: `Bearer ${authToken}` },
+            });
+            if (!res.ok) return 0;
+            const data = await res.json();
+            const balance = Number(data.balance);
+            return Number.isFinite(balance) ? balance : 0;
+        } catch (err) {
+            console.error('[AppContext] Failed to fetch wallet balance:', err);
+            return 0;
+        }
+    }, []);
+
+    const fetchCustomerOrders = useCallback(async (token?: string) => {
+        try {
+            let authToken = token;
+            if (!authToken) {
+                const { data: { session } } = await supabase.auth.getSession();
+                authToken = session?.access_token;
+            }
+            if (!authToken) {
+                setOrders([]);
+                return;
+            }
+
+            const res = await fetch('/api/customer/orders', {
+                headers: { Authorization: `Bearer ${authToken}` },
+            });
+            if (!res.ok) return;
+
+            const data = await res.json();
+            if (Array.isArray(data.orders)) {
+                const mapped: Order[] = data.orders.map((o: any) => {
+                    const firstFile = o.order_files?.[0];
+                    const ps = firstFile?.print_settings;
+                    return {
+                        id: o.id,
+                        orderNumber: o.order_number,
+                        shopId: o.shop_id,
+                        shopName: o.shop?.name || 'Print Shop',
+                        fileName: firstFile?.original_filename || (o.order_files?.length ? `${o.order_files.length} files` : 'Document'),
+                        files: o.order_files?.map((f: any) => ({
+                            name: f.original_filename,
+                            pages: f.printable_pages || 1,
+                            color: f.print_settings?.colour_mode === 'COLOUR',
+                        })),
+                        pages: o.total_printable_pages || 1,
+                        color: ps?.colour_mode === 'COLOUR',
+                        sides: ps?.sides?.startsWith('DOUBLE') ? 'double' : 'single',
+                        orientation: ps?.orientation?.toLowerCase() === 'landscape' ? 'landscape' : 'portrait',
+                        copies: ps?.copies || 1,
+                        method: 'instant',
+                        paymentStatus: o.payment_status,
+                        totalAmount: Number(o.total_amount) || 0,
+                        status: o.status,
+                        createdAt: o.created_at,
+                        customerMobile: '',
+                        rawOrder: o,
+                    };
+                });
+                setOrders(mapped);
+            }
+        } catch (err) {
+            console.error('[AppContext] Failed to fetch customer orders:', err);
+        }
+    }, []);
+
+    const refreshWallet = useCallback(async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) return;
+        const balance = await fetchWalletBalance(session.access_token);
+        setUser(prev => {
+            if (!prev) return null;
+            const updated = { ...prev, xerCoins: balance };
+            try { localStorage.setItem('xer_user', JSON.stringify(updated)); } catch { }
+            return updated;
+        });
+    }, [fetchWalletBalance]);
+
+    const refreshProfile = useCallback(async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+            const loaded = await fetchProfile(session.user.id, session.user);
+            const balance = loaded.type === 'customer' ? await fetchWalletBalance(session.access_token) : 0;
+            loaded.xerCoins = balance;
+            setUser(loaded);
+            try { localStorage.setItem('xer_user', JSON.stringify(loaded)); } catch { }
+            if (loaded.type === 'customer') await fetchCustomerOrders(session.access_token);
+            else setOrders([]);
+        } else {
+            setUser(null);
+            setOrders([]);
+            try { localStorage.removeItem('xer_user'); } catch { }
+        }
+    }, [fetchCustomerOrders, fetchWalletBalance]);
+
+    // Auth callbacks must return before making further Supabase calls (auth holds a lock).
+    useEffect(() => {
+        let mounted = true;
+        let revision = 0;
+        let timer: ReturnType<typeof setTimeout>;
+        const restore = async () => {
+            const current = ++revision;
+            try {
+                const { data: { session }, error } = await supabase.auth.getSession();
+                if (error) throw error;
+                const loaded = session?.user ? await fetchProfile(session.user.id, session.user) : null;
+                if (!mounted || current !== revision) return;
+                setUser(loaded);
+                setOrders([]);
+                if (loaded?.type === 'customer' && session) {
+                    void fetchWalletBalance(session.access_token).then(balance => {
+                        if (mounted && current === revision) setUser(prev => prev?.id === loaded.id ? { ...prev, xerCoins: balance } : prev);
+                    });
+                    void fetchCustomerOrders(session.access_token);
+                }
+            } catch {
+                if (mounted && current === revision) { setUser(null); setOrders([]); }
+            } finally {
+                if (mounted && current === revision) { setAuthInitialized(true); setIsLoading(false); }
+            }
+        };
+        void restore();
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+            if (!mounted) return;
+            if (event === 'SIGNED_OUT') {
+                revision++;
+                setUser(null); setOrders([]); setCart([]);
+                setCurrentOrder({ ...defaultOrder, files: [] });
+                setLastOrderId(''); setAuthInitialized(true); setIsLoading(false);
+                try { localStorage.removeItem('xer_user'); } catch {}
+            } else if (['SIGNED_IN', 'TOKEN_REFRESHED', 'USER_UPDATED'].includes(event)) {
+                clearTimeout(timer);
+                timer = setTimeout(() => { void restore(); }, 0);
+            }
+        });
+        return () => { mounted = false; revision++; clearTimeout(timer); subscription.unsubscribe(); };
+    }, [fetchCustomerOrders, fetchWalletBalance]);
+
+    const cartUserId = user?.id || null;
+    const cartUserIsCustomer = user?.type === 'customer';
+
+    useEffect(() => {
+        try {
+            if (!authInitialized) return;
+            const savedCart = cartUserIsCustomer && cartUserId ? localStorage.getItem(`xer_cart:${cartUserId}`) : null;
+            const parsedCart = savedCart ? JSON.parse(savedCart) as CartItem[] : [];
+            const now = Date.now();
+            setCart(parsedCart.filter(item => {
+                const createdAt = new Date(item.createdAt || 0).getTime();
+                return Number.isFinite(createdAt) && now - createdAt < CART_EXPIRY_MS;
+            }));
+        } catch {
+            setCart([]);
+        } finally {
+            setCartOwner(cartUserId);
+            setCartReady(authInitialized);
+        }
+    }, [authInitialized, cartUserId, cartUserIsCustomer]);
+
+    useEffect(() => {
+        if (!cartReady || !user || cartOwner !== user.id) return;
+        try { localStorage.setItem(`xer_cart:${user.id}`, JSON.stringify(cart, (key, value) => key === 'file' ? undefined : value)); } catch {}
+    }, [cart, cartReady, cartOwner, user?.id]);
+
+    useEffect(() => {
+        if (!cartReady) return;
+        const clearExpiredCart = () => {
+            const now = Date.now();
+            setCart(prev => prev.filter(item => {
+                const createdAt = new Date(item.createdAt || 0).getTime();
+                return Number.isFinite(createdAt) && now - createdAt < CART_EXPIRY_MS;
+            }));
+        };
+        clearExpiredCart();
+        const interval = window.setInterval(clearExpiredCart, 60 * 1000);
+        return () => window.clearInterval(interval);
+    }, [cartReady]);
+
+    const login = (mobile: string, name: string, type: UserType, data: Partial<Pick<User, 'id' | 'email' | 'avatarUrl'>> = {}) => {
+        const newUser: User = {
+            id: data.id || '',
+            mobile, name, type,
+            ...data,
+            xerCoins: 0,
+        };
+        setUser(newUser);
+        setAuthInitialized(true);
+        setIsLoading(false);
+        try { localStorage.setItem('xer_user', JSON.stringify(newUser)); } catch { }
+    };
+
+    const logout = async () => {
+        try {
+            await supabase.auth.signOut();
+        } catch (err) {
+            console.error('[AppContext] Supabase signOut error:', err);
+        }
         setUser(null);
-        localStorage.removeItem('xer_user');
+        setAuthInitialized(true);
+        setIsLoading(false);
+        try { localStorage.removeItem('xer_user'); } catch { }
         setCurrentOrder({ ...defaultOrder, files: [] });
         setLastOrderId('');
         setCart([]);
-        setActivity({});
     };
 
-    const updateProfile = (data: Partial<User>) => {
+    const updateProfile = async (data: Partial<User>) => {
         if (!user) return;
-        const updated = { ...user, ...data };
+
+        // Prepare Supabase update payload (strictly allow only full_name, avatar_url - phone requires verification)
+        const payload: { full_name?: string; avatar_url?: string } = {};
+        if (data.name !== undefined) payload.full_name = data.name;
+        if (data.avatarUrl !== undefined) payload.avatar_url = data.avatarUrl;
+
+        if (user.id && Object.keys(payload).length > 0) {
+            const { error } = await supabase
+                .from('profiles')
+                .update(payload)
+                .eq('user_id', user.id);
+
+            if (error) {
+                console.error('[AppContext] Failed to update profile in Supabase:', error);
+                throw new Error(error.message || 'Failed to update profile');
+            }
+        }
+
+        if (data.email && data.email !== user.email) {
+            const { error } = await supabase.auth.updateUser({ email: data.email.trim() });
+            if (error) throw new Error(error.message);
+            notify('Check your inbox to confirm your new email address.');
+        }
+        // Identity fields can only change through verified authentication flows.
+        const { mobile: _ignoredMobile, email: _ignoredEmail, id: _ignoredId, type: _ignoredRole, xerCoins: _ignoredBalance, ...allowedData } = data;
+        const updated = { ...user, ...allowedData };
         setUser(updated);
-        localStorage.setItem('xer_user', JSON.stringify(updated));
+        try { localStorage.setItem('xer_user', JSON.stringify(updated)); } catch { }
     };
 
     const addXerCoins = (amount: number) => {
@@ -207,38 +438,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return true;
     };
 
-    const setXerCoinsBalance = (balance: number) => {
-        if (!user || !Number.isFinite(balance) || balance < 0) return false;
-        const updated = { ...user, xerCoins: Math.round(balance * 100) / 100 };
-        setUser(updated);
-        localStorage.setItem('xer_user', JSON.stringify(updated));
+    const setXerCoinsBalance = useCallback((balance: number) => {
+        if (!Number.isFinite(balance) || balance < 0) return false;
+        setUser(prev => {
+            if (!prev) return null;
+            const rounded = Math.round(balance * 100) / 100;
+            if (prev.xerCoins === rounded) return prev;
+            const updated = { ...prev, xerCoins: rounded };
+            try { localStorage.setItem('xer_user', JSON.stringify(updated)); } catch { }
+            return updated;
+        });
         return true;
-    };
+    }, []);
 
     const addOrder = (order: Order) => {
         setOrders(prev => [order, ...prev]);
-        // Deduct XerCoins if paid with wallet
-        if (order.paymentMethod === 'wallet' && user) {
-            const nextBalance = Math.max(0, Math.round((user.xerCoins - order.totalAmount) * 100) / 100);
-            const updated = { ...user, xerCoins: nextBalance };
-            setUser(updated);
-            localStorage.setItem('xer_user', JSON.stringify(updated));
-        }
     };
 
-    const addToCart = (item: CartItem) => setCart(prev => [...prev, item]);
+    const addToCart = (item: Omit<CartItem, 'createdAt'> & Partial<Pick<CartItem, 'createdAt'>>) => {
+        setCart(previous => {
+            const existing = item.orderId ? previous.find(entry => entry.orderId === item.orderId) : undefined;
+            const next = { ...item, createdAt: existing?.createdAt || item.createdAt || new Date().toISOString(), source: item.source || 'upload' as const };
+            return existing ? previous.map(entry => entry.orderId === item.orderId ? next : entry) : [...previous, next];
+        });
+    };
     const removeFromCart = (idx: number) => setCart(prev => prev.filter((_, i) => i !== idx));
-    const streak = computeStreak(activity);
-    const totalActiveDays = Object.keys(activity).length;
 
     return (
         <AppContext.Provider value={{
-            user, isLoggedIn: !!user, login, logout,
+            user, isLoggedIn: authInitialized && !!user, authInitialized, isAuthLoading: !authInitialized, login, logout,
             orders, addOrder, currentOrder, setCurrentOrder,
             lastOrderId, setLastOrderId,
             cart, addToCart, removeFromCart, isLoading,
             theme, toggleTheme, updateProfile, addXerCoins, setXerCoinsBalance,
-            activity, streak, totalActiveDays,
+            refreshProfile,
+            refreshOrders: fetchCustomerOrders,
+            refreshWallet,
         }}>
             {children}
         </AppContext.Provider>

@@ -1,0 +1,673 @@
+.pageContainer {
+    min-height: 85vh;
+    padding: 32px 20px 80px;
+    max-width: 1240px;
+    margin: 0 auto;
+}
+
+.contentWrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+/* Breadcrumbs */
+.breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--fg-muted);
+}
+
+.breadcrumbStep {
+    color: var(--fg-muted);
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.breadcrumbStep:hover {
+    color: var(--accent);
+}
+
+.breadcrumbCurrent {
+    color: var(--accent);
+    font-weight: 700;
+}
+
+.breadcrumbSep {
+    color: var(--fg-subtle, rgba(255, 255, 255, 0.2));
+}
+
+/* Header */
+.pageHeader {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.pageTitle {
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--fg);
+    margin: 0;
+}
+
+.pageSubtitle {
+    font-size: 14px;
+    color: var(--fg-muted);
+    margin: 0;
+}
+
+/* 2-Column Responsive Layout */
+.layoutGrid {
+    display: grid;
+    grid-template-columns: 1.35fr 1fr;
+    gap: 28px;
+    align-items: start;
+}
+
+.mainColumn {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.sidebarColumn {
+    position: relative;
+}
+
+.stickySidebar {
+    position: sticky;
+    top: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* Generic Card */
+.card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+}
+
+.cardHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+}
+
+.cardTitle {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--fg);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cardTitleIcon {
+    color: var(--accent);
+}
+
+/* Badges */
+.badgeOrderNumber {
+    font-family: monospace;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 10px;
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    color: var(--fg);
+}
+
+.badgeVerified {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #10b981;
+}
+
+/* Shop Box */
+.shopBox {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px;
+    background: rgba(84, 189, 206, 0.04);
+    border: 1px solid rgba(84, 189, 206, 0.15);
+    border-radius: 12px;
+}
+
+.shopIcon {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    background: rgba(84, 189, 206, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+.shopName {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--fg);
+}
+
+.shopMeta {
+    font-size: 12px;
+    color: var(--fg-muted);
+    margin-top: 2px;
+}
+
+/* Multi-document Switcher */
+.docSelectorRow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.docSelect {
+    flex: 1;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-size: 14px;
+    font-weight: 600;
+    outline: none;
+    cursor: pointer;
+}
+
+/* Preview Box */
+.previewContainer {
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.previewMissing {
+    padding: 32px 16px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    color: var(--fg-muted);
+}
+
+/* Print Settings Manifest */
+.printSettingsGrid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+.settingPill {
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.settingLabel {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--fg-muted);
+}
+
+.settingVal {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--fg);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.editSettingsBtn {
+    margin-top: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-radius: 10px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.editSettingsBtn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(84, 189, 206, 0.05);
+}
+
+/* Add-ons List */
+.addonsList {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.addonItem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+}
+
+.addonLeft {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.addonIcon {
+    color: var(--accent);
+}
+
+.addonName {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--fg);
+}
+
+.addonQty {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 7px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    color: var(--fg-muted);
+}
+
+.addonPrice {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--fg);
+}
+
+/* Payment Summary Sidebar */
+.paymentCard {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.summaryTitle {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--fg);
+    margin: 0;
+}
+
+.summaryRows {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.summaryRow {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--fg-muted);
+}
+
+.summaryRowVal {
+    font-weight: 600;
+    color: var(--fg);
+}
+
+.summaryDivider {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0;
+}
+
+.totalRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding-top: 4px;
+}
+
+.totalLabel {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--fg);
+}
+
+.totalAmount {
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Payment Method Tabs */
+.methodSection {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.methodSectionTitle {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--fg-muted);
+}
+
+.methodTabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.methodTab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 8px;
+    border-radius: 10px;
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    color: var(--fg-muted);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.methodTab:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--fg);
+}
+
+.methodTabActive {
+    background: rgba(84, 189, 206, 0.12);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* Wallet Status Box */
+.walletBox {
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.walletRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.walletInsufficient {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #ef4444;
+    font-weight: 600;
+    font-size: 11px;
+    margin-top: 4px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+/* Primary Pay CTA Button */
+.payBtn {
+    width: 100%;
+    padding: 14px 20px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--accent) 0%, #0d9488 100%);
+    border: none;
+    color: #031317;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.15s ease;
+    box-shadow: 0 4px 14px rgba(84, 189, 206, 0.35);
+}
+
+.payBtn:hover:not(:disabled) {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(84, 189, 206, 0.45);
+}
+
+.payBtn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.payBtn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* Cart Button */
+.cartBtn {
+    width: 100%;
+    padding: 11px 16px;
+    border-radius: 10px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.15s ease;
+}
+
+.cartBtn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(84, 189, 206, 0.05);
+}
+
+.cartBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Trust Badge */
+.trustBadge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--fg-muted);
+}
+
+.trustIcon {
+    color: #10b981;
+}
+
+/* Notices & Alert Banners */
+.bannerNotice {
+    padding: 14px 16px;
+    border-radius: 12px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.bannerCancelled {
+    background: rgba(234, 179, 8, 0.08);
+    border: 1px solid rgba(234, 179, 8, 0.25);
+    color: #eab308;
+}
+
+.bannerFailed {
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    color: #ef4444;
+}
+
+.bannerNotice button {
+    background: transparent;
+    border: 1px solid currentColor;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    color: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+/* Success View */
+.successCard {
+    max-width: 620px;
+    margin: 40px auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 36px 28px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 20px;
+}
+
+.successIconWrap {
+    width: 68px;
+    height: 68px;
+    border-radius: 50%;
+    background: rgba(16, 185, 129, 0.12);
+    border: 2px solid #10b981;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #10b981;
+}
+
+.successTitle {
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--fg);
+    margin: 0;
+}
+
+.successSub {
+    font-size: 14px;
+    color: var(--fg-muted);
+    margin: 0;
+    max-width: 440px;
+}
+
+.successDetails {
+    width: 100%;
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.successActions {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    gap: 10px;
+}
+
+/* Responsive Rules */
+@media (max-width: 1024px) {
+    .layoutGrid {
+        grid-template-columns: 1fr;
+        gap: 24px;
+    }
+
+    .stickySidebar {
+        position: static;
+    }
+
+    .printSettingsGrid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 640px) {
+    .pageContainer {
+        padding: 20px 14px 100px;
+    }
+
+    .pageTitle {
+        font-size: 24px;
+    }
+
+    .card {
+        padding: 18px 16px;
+    }
+
+    .printSettingsGrid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .paymentCard {
+        padding: 20px 16px;
+    }
+}

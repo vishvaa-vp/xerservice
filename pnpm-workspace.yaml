@@ -1,0 +1,8 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+linkWorkspacePackages: true
+
+allowBuilds:
+  unrs-resolver: false

@@ -1,0 +1,1 @@
+../../../../../src/app/palette/page.tsx

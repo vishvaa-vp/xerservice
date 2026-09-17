@@ -1,0 +1,1 @@
+../../../../../src/app/how-it-works/page.tsx

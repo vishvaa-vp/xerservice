@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "paths": {
+      "@packages/types": ["../types/src/index.ts"],
+      "@packages/types/*": ["../types/src/*"]
+    }
+  },
+  "include": ["src/**/*"]
+}

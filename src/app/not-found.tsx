@@ -12,7 +12,7 @@ export default function NotFound() {
             <p style={{ fontSize: '16px', color: 'var(--fg-muted)', marginBottom: '40px', maxWidth: '360px' }}>The page you're looking for doesn't exist or has been moved.</p>
             <div style={{ display: 'flex', gap: '12px' }}>
                 <Link href="/" className="btn btn-accent">Go Home</Link>
-                <Link href="/shops" className="btn btn-outline">Find Shops</Link>
+                <Link href="/" className="btn btn-outline">Print Shops</Link>
             </div>
         </div>
     );

@@ -1,0 +1,1 @@
+../../../../../../src/app/auth/callback/page.tsx

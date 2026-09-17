@@ -1,0 +1,30 @@
+{
+  "name": "@packages/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./supabase": "./src/supabase/index.ts",
+    "./payments": "./src/payments/index.ts",
+    "./pricing": "./src/pricing/index.ts",
+    "./pricing/pricing-engine": "./src/pricing/pricing-engine.ts",
+    "./pricing/order-pricing": "./src/pricing/order-pricing.ts",
+    "./finance": "./src/finance/index.ts",
+    "./addons": "./src/addons/index.ts",
+    "./notifications": "./src/notifications/index.ts",
+    "./notifications/notification-outbox": "./src/notifications/notification-outbox.ts",
+    "./auth/admin-auth": "./src/auth/admin-auth.ts",
+    "./auth/phone-sync": "./src/auth/phone-sync.ts",
+    "./receipts": "./src/receipts/index.ts",
+    "./whatsapp": "./src/whatsapp/index.ts"
+  },
+  "dependencies": {
+    "@packages/types": "*",
+    "@packages/shared": "*",
+    "@supabase/supabase-js": "^2.116.0",
+    "pdf-lib": "^1.17.1"
+  }
+}

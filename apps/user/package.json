@@ -1,0 +1,33 @@
+{
+  "name": "@apps/user",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "lint": "next lint",
+    "predev": "node ../../scripts/prepare-pdfjs.cjs",
+    "prebuild": "node ../../scripts/prepare-pdfjs.cjs"
+  },
+  "dependencies": {
+    "@packages/types": "*",
+    "@packages/shared": "*",
+    "@supabase/supabase-js": "^2.116.0",
+    "@types/leaflet": "^1.9.21",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.394.0",
+    "next": "15.5.24",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^6.3.289",
+    "react": "^18",
+    "react-dom": "^18",
+    "react-leaflet": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "typescript": "^5"
+  }
+}

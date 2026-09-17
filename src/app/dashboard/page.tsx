@@ -1,14 +1,14 @@
 'use client';
+import { notify } from '@/components/ui/Feedback';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import Link from 'next/link';
-import LoginActivityHeatmap from '@/components/ui/LoginActivityHeatmap';
+import { useRouter } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
 import {
     ArrowUpRight,
     Bell,
     CheckCircle,
-    ClipboardList,
     Coins,
     Lock,
     Package,
@@ -18,15 +18,31 @@ import {
 } from 'lucide-react';
 
 export default function DashboardPage() {
-    const { user, orders, updateProfile, activity, streak, totalActiveDays } = useApp();
+    const router = useRouter();
+    const { user, orders, updateProfile, isLoading, authInitialized } = useApp();
     const [activeTab, setActiveTab] = useState<'overview' | 'profile'>('overview');
     const [name, setName] = useState(user?.name || '');
     const [email, setEmail] = useState(user?.email || '');
     const [saving, setSaving] = useState(false);
     const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
-    const activeOrders = orders.filter((o) => o.status !== 'completed').slice(0, 3);
-    const completedOrders = orders.filter((o) => o.status === 'completed');
+    useEffect(() => {
+        if (!authInitialized || isLoading) return;
+        if (!user) {
+            router.push('/login?redirect=/dashboard');
+        }
+    }, [user, isLoading, authInitialized, router]);
+
+    const activeOrders = orders.filter((o) => (o.status || '').toLowerCase() !== 'completed' && (o.status || '').toLowerCase() !== 'draft').slice(0, 3);
+    const completedOrders = orders.filter((o) => (o.status || '').toLowerCase() === 'completed');
+
+    if (!authInitialized || (isLoading && !user)) {
+        return (
+            <div style={{ minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span className="spinner spinner-lg" />
+            </div>
+        );
+    }
 
     if (!user) {
         return (
@@ -44,19 +60,19 @@ export default function DashboardPage() {
     }
 
     const statusColor = (s: string) => {
-        if (s === 'completed') return 'badge-success';
-        if (s === 'ready') return 'badge-dark';
-        if (s === 'printing') return 'badge-warning';
+        const norm = (s || '').toLowerCase();
+        if (norm === 'completed') return 'badge-success';
+        if (norm === 'ready') return 'badge-dark';
+        if (norm === 'printing') return 'badge-warning';
         return 'badge-outline';
     };
 
-    const handleUpdateProfile = (e: React.FormEvent) => {
+    const handleUpdateProfile = async (e: React.FormEvent) => {
         e.preventDefault();
         setSaving(true);
-        setTimeout(() => {
-            updateProfile({ name: name.trim(), email: email.trim() });
-            setSaving(false);
-        }, 500);
+        try { await updateProfile({ name: name.trim(), email: email.trim() }); notify('Profile saved.'); }
+        catch (error) { notify(error instanceof Error ? error.message : 'Profile could not be saved.'); }
+        finally { setSaving(false); }
     };
 
     const onAvatarUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -95,14 +111,10 @@ export default function DashboardPage() {
                                         <Coins size={13} />
                                         Wallet
                                     </Link>
-                                    <button type="button" onClick={() => setActiveTab('profile')} className="btn btn-outline btn-sm" style={{ borderRadius: '999px', height: '30px', padding: '0 12px', fontSize: '12px', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                                        <ClipboardList size={13} />
-                                        Activity
-                                    </button>
                                 </div>
                             </div>
                         </div>
-                        <Link href="/shops" className="btn btn-primary" style={{ height: '48px', padding: '0 24px', borderRadius: '14px', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: '800' }}>
+                        <Link href="/" className="btn btn-primary" style={{ height: '48px', padding: '0 24px', borderRadius: '14px', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: '800' }}>
                             <Plus size={18} /> New Print Order
                         </Link>
                     </div>
@@ -125,8 +137,7 @@ export default function DashboardPage() {
                                 {[
                                     { label: 'Total Orders', value: orders.length, icon: Package, color: '#3b82f6' },
                                     { label: 'Completed', value: completedOrders.length, icon: CheckCircle, color: '#10b981' },
-                                    { label: 'XerCoins', value: `Rs ${user.xerCoins || 0}`, icon: Coins, color: '#f59e0b' },
-                                    { label: 'Active Days', value: totalActiveDays, icon: ClipboardList, color: '#16a34a' },
+                                    { label: 'XerCoins', value: `Rs ${user.xerCoins || 0}`, icon: Coins, color: '#54bdce' },
                                 ].map((stat) => (
                                     <div key={stat.label} className="card" style={{ padding: '24px', borderRadius: '20px', border: 'none', boxShadow: 'var(--shadow-sm)' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
@@ -148,13 +159,13 @@ export default function DashboardPage() {
                                         <Link href="/dashboard/orders" style={{ fontSize: '13px', color: 'var(--accent)', fontWeight: '700', textDecoration: 'none' }}>View History</Link>
                                     </div>
                                     {activeOrders.length === 0 ? (
-                                        <p style={{ color: 'var(--fg-muted)' }}>No recent activity to show.</p>
+                                        <p style={{ color: 'var(--fg-muted)' }}>No recent orders to show.</p>
                                     ) : (
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                             {activeOrders.map((order) => (
                                                 <div key={order.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px', background: 'var(--bg-secondary)', borderRadius: '14px', border: '1px solid var(--border)' }}>
                                                     <div>
-                                                        <p style={{ fontSize: '15px', fontWeight: '700' }}>#{order.id} - {order.shopName}</p>
+                                                        <p style={{ fontSize: '15px', fontWeight: '700' }}>#{order.orderNumber || order.id} - {order.shopName}</p>
                                                         <p style={{ fontSize: '12px', color: 'var(--fg-muted)', marginTop: '2px' }}>{order.fileName}</p>
                                                     </div>
                                                     <span className={`badge ${statusColor(order.status)}`} style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: '800' }}>{order.status}</span>
@@ -170,11 +181,6 @@ export default function DashboardPage() {
                                         <h3 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '12px' }}>Wallet Balance</h3>
                                         <div style={{ fontSize: '32px', fontWeight: '900', marginBottom: '18px' }}>Rs {user.xerCoins || 0}</div>
                                         <Link href="/dashboard/wallet" className="btn btn-accent btn-full" style={{ borderRadius: '12px', fontWeight: '800' }}>Topup Balance</Link>
-                                    </div>
-
-                                    <div className="card" style={{ padding: '20px', borderRadius: '20px' }}>
-                                        <p style={{ fontSize: '13px', color: 'var(--fg-muted)', fontWeight: '700', marginBottom: '6px' }}>Current streak</p>
-                                        <div style={{ fontSize: '30px', fontWeight: '900', color: '#16a34a' }}>{streak} day{streak === 1 ? '' : 's'}</div>
                                     </div>
                                 </div>
                             </div>
@@ -229,8 +235,6 @@ export default function DashboardPage() {
                                     </div>
                                 </div>
                             </div>
-
-                            <LoginActivityHeatmap activity={activity} streak={streak} totalActiveDays={totalActiveDays} title="Login Activity" />
                         </div>
                     )}
                 </div>
