@@ -1,1 +1,0 @@
-../../../../../src/components/legal/TermsContent.tsx

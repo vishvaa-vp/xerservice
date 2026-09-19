@@ -28,37 +28,100 @@
 .checkbox input { width: 16px; height: 16px; flex-shrink: 0; accent-color: var(--accent); }
 .error { font-size: 12px; color: var(--fg-muted); margin-top: 8px; }
 .addonsSection { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
-.addonsList { display: flex; flex-direction: column; gap: 10px; }
-.addonCard { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--bg-secondary); cursor: pointer; transition: all 0.2s ease; }
+.addonsList { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.addonCard { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--bg-secondary); cursor: pointer; transition: all 0.2s ease; }
 .addonCard:hover:not(.disabled) { border-color: var(--accent); }
-.addonCard.selected { border-color: var(--accent); background: var(--accent-muted); }
+.addonCard.selected { border-color: var(--accent); background: var(--accent-muted, rgba(234, 88, 12, 0.08)); }
 .addonCard.disabled { opacity: 0.55; cursor: not-allowed; background: var(--bg); }
-.addonThumb { width: 46px; height: 46px; border-radius: 8px; object-fit: cover; background: var(--bg-tertiary); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 20px; border: 1px solid var(--border); }
+.addonThumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; background: var(--bg-tertiary); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 20px; border: 1px solid var(--border); }
 .addonDetails { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .addonTitleRow { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .addonName { font-size: 13px; font-weight: 700; color: var(--fg); }
 .addonPrice { font-size: 13px; font-weight: 800; color: var(--accent); }
-.addonSubtext { font-size: 11px; color: var(--fg-muted); }
+.addonSubtext { font-size: 11px; color: var(--fg-muted); line-height: 1.4; }
 .addonWarning { font-size: 11px; color: #ef4444; font-weight: 600; margin-top: 2px; }
 .addonCheckbox { width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; }
+.addonAddBtn { display: inline-flex; align-items: center; justify-content: center; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; border: 1.5px solid var(--accent); background: var(--bg); color: var(--accent); cursor: pointer; white-space: nowrap; flex-shrink: 0; transition: all 0.15s ease; }
+.addonAddBtn:hover:not(:disabled) { background: var(--accent); color: #fff; }
+.addonAddBtn:disabled { opacity: 0.5; cursor: not-allowed; border-color: var(--border); color: var(--fg-muted); }
+.addonAddedBtn { background: var(--accent); color: #fff; border-color: var(--accent); }
+.addonAddedBtn:hover:not(:disabled) { background: var(--accent-hover, #c2410c); border-color: var(--accent-hover, #c2410c); }
+@media (max-width: 520px) { .addonsList { grid-template-columns: 1fr; } }
 .footer { padding: 16px 28px; border-top: 1px solid var(--border); flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .actions { display: flex; gap: 10px; }
 .actions .btn { font-size: 13px; }
 .modal button:focus-visible, .modal input:focus-visible, .modal select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .modal button:disabled { cursor: default; opacity: .45; }
 @media (max-width: 768px) {
-    .modal { width: calc(100% - 16px); height: calc(100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); border-radius: 12px; }
-    .header { padding: 12px 16px; }
+    .modal {
+        margin: auto 0 0;
+        width: 100%;
+        max-width: 100%;
+        height: min(92dvh, calc(100dvh - 24px));
+        max-height: 92dvh;
+        border-radius: 20px 20px 0 0;
+        border-bottom: 0;
+        border-left: 0;
+        border-right: 0;
+        box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.28);
+        animation: mobileSheetSlideUp 220ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .header {
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border);
+    }
     .header h2 { font-size: 18px; }
-    .body { display: flex; flex-direction: column; }
-    .controls { flex: 1; min-height: 80px; padding: 20px 16px; gap: 20px; }
-    .preview { order: -1; flex-shrink: 0; padding: 12px 16px; border-left: 0; border-bottom: 1px solid var(--border); overflow: hidden; }
+    .body { display: flex; flex-direction: column; overflow: hidden; flex: 1; min-height: 0; }
+    .controls {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 18px 16px 24px;
+        gap: 18px;
+    }
+    .preview {
+        order: -1;
+        flex-shrink: 0;
+        padding: 12px 16px;
+        border-left: 0;
+        border-bottom: 1px solid var(--border);
+        overflow: hidden;
+        background: var(--bg-secondary);
+    }
     .preview > div > div:first-child { margin-bottom: 8px; }
-    .footer { padding: 12px 16px; flex-wrap: wrap; }
+    .footer {
+        padding: 14px 16px calc(16px + env(safe-area-inset-bottom));
+        flex-wrap: wrap;
+        gap: 10px;
+        background: var(--bg);
+        border-top: 1px solid var(--border);
+    }
     .footer > span:empty { display: none; }
-    .actions { margin-left: auto; }
+    .actions {
+        margin-left: auto;
+        display: flex;
+        gap: 8px;
+        width: 100%;
+    }
+    .actions .btn {
+        flex: 1;
+        min-height: 46px;
+        font-size: 14px;
+    }
     .pair { gap: 12px; }
     .icon, .stepper button { min-width: 44px; min-height: 44px; }
     .checkbox { min-height: 32px; }
+    .segments button { min-height: 48px; }
 }
 @media (max-width: 360px) { .pair:has(.stepper) { grid-template-columns: minmax(0, 1fr); } }
+
+@keyframes mobileSheetSlideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+
+@media (max-width: 768px) {
+    .actions { flex-wrap: wrap; }
+    .actions > button { flex: 1 1 120px; min-height: 44px; }
+}

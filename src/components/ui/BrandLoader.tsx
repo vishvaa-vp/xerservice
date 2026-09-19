@@ -83,7 +83,10 @@ export default function BrandLoader({ ready }: { ready: boolean }) {
                 <div className={styles.activity}>
                     <span className={styles.bar} />
                 </div>
-                <p className={styles.caption}>Getting things ready</p>
+                <p className={styles.caption}>
+                    Getting things ready
+                    <span className={styles.dots}><i /><i /><i /></span>
+                </p>
             </div>
         </div>
     );

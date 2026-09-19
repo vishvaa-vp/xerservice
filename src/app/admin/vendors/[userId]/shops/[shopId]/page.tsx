@@ -34,11 +34,13 @@ import {
     ChevronUp,
     X,
     UploadCloud,
+    Image as ImageIcon,
 } from 'lucide-react';
+import ShopPhotoCropModal from '@/components/admin/ShopPhotoCropModal';
 import type { ShopReadinessReport } from '@/lib/setup-readiness';
 import type { ShopCustomerPreview } from '@/lib/customer-preview';
 
-type WorkspaceTab = 'dashboard' | 'profile' | 'pricing' | 'addons' | 'commission' | 'finance';
+type WorkspaceTab = 'dashboard' | 'profile' | 'pricing' | 'addons' | 'commission';
 
 interface ShopData {
     id: string;
@@ -113,15 +115,6 @@ export default function DedicatedShopWorkspacePage() {
     const [previewModalOpen, setPreviewModalOpen] = useState(false);
     const [simulatedStatus, setSimulatedStatus] = useState<'OPEN' | 'PAUSED' | 'CLOSED' | 'CLOSING_SOON' | null>(null);
 
-    // Quote simulator state
-    const [simPages, setSimPages] = useState<number>(8);
-    const [simPaperSize, setSimPaperSize] = useState<'A4' | 'A3' | 'LEGAL'>('A4');
-    const [simMode, setSimMode] = useState<'BW' | 'COLOUR'>('BW');
-    const [simSides, setSimSides] = useState<'SINGLE' | 'DOUBLE_LONG_EDGE' | 'DOUBLE_SHORT_EDGE'>('DOUBLE_LONG_EDGE');
-    const [simCopies, setSimCopies] = useState<number>(1);
-    const [simPagesPerSide, setSimPagesPerSide] = useState<number>(2);
-    const [simSelectedAddons, setSimSelectedAddons] = useState<string[]>([]);
-
     // Rate matrix state
     const [matrixRows, setMatrixRows] = useState<Array<{ paper_size: string; print_mode: string; sides: string; price_per_sheet: number; active: boolean; configured?: boolean }>>([]);
     const [savingMatrix, setSavingMatrix] = useState(false);
@@ -136,15 +129,38 @@ export default function DedicatedShopWorkspacePage() {
     const [assigningAddon, setAssigningAddon] = useState(false);
     const [addonFeedback, setAddonFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-    // Commission Simulator & Management state (Stage A5)
-    const [commSimMethod, setCommSimMethod] = useState<'REVENUE_PERCENTAGE' | 'CONFIGURED_PROFIT_PERCENTAGE' | 'FIXED_PER_UNIT'>('REVENUE_PERCENTAGE');
-    const [commSimRate, setCommSimRate] = useState<number>(10);
-    const [commSimCostBasis, setCommSimCostBasis] = useState<number>(2.40);
-    const [commSimQuantity, setCommSimQuantity] = useState<number>(2);
-    const [commSimUnit, setCommSimUnit] = useState<'PHYSICAL_SHEET' | 'PRINTED_SIDE' | 'DOCUMENT_PAGE' | 'SERVICE_UNIT'>('PHYSICAL_SHEET');
-    const [commSimRevenue, setCommSimRevenue] = useState<number>(4.00);
+    // Custom add-on creation state
+    const [addServiceMode, setAddServiceMode] = useState<'catalogue' | 'custom'>('custom');
+    const [customName, setCustomName] = useState('');
+    const [customDescription, setCustomDescription] = useState('');
+    const [customImageUrl, setCustomImageUrl] = useState('');
+    const [customPrice, setCustomPrice] = useState('20');
+    const [customPrepTime, setCustomPrepTime] = useState('5');
+    const [customMinPages, setCustomMinPages] = useState('1');
+    const [customMaxPages, setCustomMaxPages] = useState('100');
 
-    const [newRuleRate, setNewRuleRate] = useState('5');
+    // Editing add-on state
+    const [editingAddon, setEditingAddon] = useState<any | null>(null);
+    const [editAddonName, setEditAddonName] = useState('');
+    const [editAddonDescription, setEditAddonDescription] = useState('');
+    const [editAddonImageUrl, setEditAddonImageUrl] = useState('');
+    const [editAddonPrice, setEditAddonPrice] = useState('20');
+    const [editAddonPrepTime, setEditAddonPrepTime] = useState('5');
+    const [editAddonMinPages, setEditAddonMinPages] = useState('1');
+    const [editAddonMaxPages, setEditAddonMaxPages] = useState('100');
+    const [editAddonAvailable, setEditAddonAvailable] = useState(true);
+    const [savingAddon, setSavingAddon] = useState(false);
+
+    // Shop Photo Crop Modal state
+    const [cropModalOpen, setCropModalOpen] = useState(false);
+    const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+    const [cropFileInfo, setCropFileInfo] = useState<{ name: string; sizeKb: number } | null>(null);
+
+    // Modern Commission Customizer state
+    const [commSimOrderAmount, setCommSimOrderAmount] = useState<number>(100);
+    const [showAdvancedScheduling, setShowAdvancedScheduling] = useState(false);
+
+    const [newRuleRate, setNewRuleRate] = useState('10');
     const [newRuleEffectiveFrom, setNewRuleEffectiveFrom] = useState(new Date().toISOString().slice(0, 10));
     const [newRuleEffectiveTo, setNewRuleEffectiveTo] = useState('');
     const [newRuleClosePrevious, setNewRuleClosePrevious] = useState(true);
@@ -370,16 +386,73 @@ export default function DedicatedShopWorkspacePage() {
             setSavingMatrix(false);
         }
     };
+    // Image Handlers
+    const handleShopPhotoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            setCropImageSrc(reader.result as string);
+            setCropFileInfo({ name: file.name, sizeKb: Math.round(file.size / 1024) });
+            setCropModalOpen(true);
+        };
+        reader.readAsDataURL(file);
+        e.target.value = '';
+    };
 
-    // Addon Handlers
+    const handleCustomImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            setCustomImageUrl(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+        e.target.value = '';
+    };
+
+    const handleEditAddonImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            setEditAddonImageUrl(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+        e.target.value = '';
+    };
+
     const handleAssignAddon = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!assignAddonId) return;
         setAssigningAddon(true);
         setAddonFeedback(null);
         try {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) throw new Error('Not authenticated');
+
+            const payload = addServiceMode === 'custom'
+                ? {
+                    name: customName,
+                    description: customDescription,
+                    imageUrl: customImageUrl.trim() || undefined,
+                    price: Number(customPrice) || 0,
+                    estimatedMinutes: Number(customPrepTime) || 0,
+                    minPages: Number(customMinPages) || 1,
+                    maxPages: Number(customMaxPages) || 100,
+                    isAvailable: true,
+                }
+                : {
+                    addonId: assignAddonId,
+                    price: Number(assignPrice) || 0,
+                    isAvailable: true,
+                };
+
+            if (addServiceMode === 'custom' && !customName.trim()) {
+                throw new Error('Service name is required.');
+            }
+            if (addServiceMode === 'catalogue' && !assignAddonId) {
+                throw new Error('Please choose an add-on service.');
+            }
 
             const res = await fetch(`/api/admin/vendors/${vendorId}/shops/${shopId}/addons`, {
                 method: 'POST',
@@ -387,26 +460,84 @@ export default function DedicatedShopWorkspacePage() {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${session.access_token}`,
                 },
+                body: JSON.stringify(payload),
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to add service');
+
+            setAddons(prev => [...prev, data.assignment]);
+            if (assignAddonId) {
+                setAvailableCatalogue(prev => prev.filter(c => c.id !== assignAddonId));
+            }
+            setAssignAddonId('');
+            setCustomName('');
+            setCustomDescription('');
+            setCustomImageUrl('');
+            setCustomPrice('20');
+            setCustomPrepTime('5');
+            setCustomMinPages('1');
+            setCustomMaxPages('100');
+            setAssignModalOpen(false);
+            setAddonFeedback({ type: 'success', message: 'Service successfully added to shop!' });
+            setTimeout(() => setAddonFeedback(null), 4000);
+        } catch (err: any) {
+            setAddonFeedback({ type: 'error', message: err.message || 'Failed to add service' });
+        } finally {
+            setAssigningAddon(false);
+        }
+    };
+
+    const handleStartEditAddon = (addonItem: any) => {
+        setEditingAddon(addonItem);
+        setEditAddonName(addonItem.name || addonItem.addons?.name || '');
+        setEditAddonDescription(addonItem.description || addonItem.addons?.description || '');
+        setEditAddonImageUrl(addonItem.image_url || addonItem.imageUrl || addonItem.addons?.image_url || '');
+        setEditAddonPrice(String(addonItem.price || '0'));
+        setEditAddonPrepTime(String(addonItem.estimated_minutes ?? addonItem.addons?.estimated_minutes ?? 0));
+        setEditAddonMinPages(String(addonItem.min_pages ?? addonItem.addons?.min_pages ?? 1));
+        setEditAddonMaxPages(String(addonItem.max_pages ?? addonItem.addons?.max_pages ?? 100));
+        setEditAddonAvailable(addonItem.is_available !== undefined ? addonItem.is_available : (addonItem.available !== undefined ? addonItem.available : true));
+    };
+
+    const handleSaveEditAddon = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingAddon) return;
+        setSavingAddon(true);
+        setAddonFeedback(null);
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) throw new Error('Not authenticated');
+
+            const res = await fetch(`/api/admin/vendors/${vendorId}/shops/${shopId}/addons/${editingAddon.id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session.access_token}`,
+                },
                 body: JSON.stringify({
-                    addonId: assignAddonId,
-                    price: Number(assignPrice) || 0,
-                    isAvailable: true,
+                    name: editAddonName,
+                    description: editAddonDescription,
+                    imageUrl: editAddonImageUrl.trim() || undefined,
+                    price: Number(editAddonPrice) || 0,
+                    estimatedMinutes: Number(editAddonPrepTime) || 0,
+                    minPages: Number(editAddonMinPages) || 1,
+                    maxPages: Number(editAddonMaxPages) || 100,
+                    isAvailable: editAddonAvailable,
                 }),
             });
 
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Failed to assign add-on');
+            if (!res.ok) throw new Error(data.error || 'Failed to update service');
 
-            setAddons(prev => [...prev, data.assignment]);
-            setAvailableCatalogue(prev => prev.filter(c => c.id !== assignAddonId));
-            setAssignAddonId('');
-            setAssignModalOpen(false);
-            setAddonFeedback({ type: 'success', message: 'Add-on successfully assigned to shop!' });
+            setAddons(prev => prev.map(a => a.id === editingAddon.id ? data.assignment : a));
+            setEditingAddon(null);
+            setAddonFeedback({ type: 'success', message: 'Service successfully updated!' });
             setTimeout(() => setAddonFeedback(null), 4000);
         } catch (err: any) {
-            setAddonFeedback({ type: 'error', message: err.message || 'Failed to assign add-on' });
+            setAddonFeedback({ type: 'error', message: err.message || 'Failed to update service' });
         } finally {
-            setAssigningAddon(false);
+            setSavingAddon(false);
         }
     };
 
@@ -459,117 +590,6 @@ export default function DedicatedShopWorkspacePage() {
             setAddonFeedback({ type: 'error', message: err.message || 'Failed to remove add-on' });
             setTimeout(() => setAddonFeedback(null), 4000);
         }
-    };
-
-    // Calculate Quote in Simulator (Section 6.3)
-    const calculateSimQuote = () => {
-        // Find matching rate in matrixRows or pricing
-        const matchingRow = matrixRows.length > 0
-            ? matrixRows.find(p => p.paper_size === simPaperSize && p.print_mode === simMode && p.sides === simSides && p.active)
-            : pricing.find(p => p.paper_size === simPaperSize && p.print_mode === simMode && p.sides === simSides && p.active);
-
-        const sheetRate = matchingRow && Number(matchingRow.price_per_sheet) > 0 ? Number(matchingRow.price_per_sheet) : null;
-        if (sheetRate === null) {
-            return { error: `Price needed: ${simPaperSize} ${simMode === 'BW' ? 'B&W' : 'Colour'} (${simSides.replace(/_/g, ' ')}) is not active or priced for this shop. Customers will be blocked.` };
-        }
-
-        const printedSidesPerCopy = Math.ceil(simPages / Math.max(1, simPagesPerSide));
-        const sheetsPerCopy = simSides.includes('DOUBLE')
-            ? Math.ceil(printedSidesPerCopy / 2)
-            : printedSidesPerCopy;
-        const totalPhysicalSheets = sheetsPerCopy * Math.max(1, simCopies);
-        const printingAmount = Math.round(totalPhysicalSheets * sheetRate * 100) / 100;
-
-        // Calculate selected add-ons amount
-        let addonsAmount = 0;
-        for (const saId of simSelectedAddons) {
-            const foundSa = addons.find(a => (a.id === saId || a.addon_id === saId));
-            if (foundSa) {
-                addonsAmount += Number(foundSa.price || 0);
-            }
-        }
-        addonsAmount = Math.round(addonsAmount * 100) / 100;
-
-        const totalAmount = Math.round((printingAmount + addonsAmount) * 100) / 100;
-        const commissionPct = activeRule ? Number(activeRule.commissionPercentage || 0) : 0;
-        const commissionAmount = Math.round((totalAmount * (commissionPct / 100)) * 100) / 100;
-        const vendorNet = Math.round((totalAmount - commissionAmount) * 100) / 100;
-
-        return {
-            rate: sheetRate,
-            printedSidesPerCopy,
-            sheetsPerCopy,
-            totalPhysicalSheets,
-            printingAmount,
-            addonsAmount,
-            totalAmount,
-            commissionPct,
-            commissionAmount,
-            vendorNet,
-        };
-    };
-
-    // Load standard Astraplan Section 8.2 worked example presets
-    const loadScenarioPreset = (scenario: 1 | 2 | 3 | 4) => {
-        if (scenario === 1) {
-            setCommSimMethod('REVENUE_PERCENTAGE');
-            setCommSimRate(10);
-            setCommSimRevenue(4.00);
-            setCommSimQuantity(2);
-            setCommSimUnit('PHYSICAL_SHEET');
-        } else if (scenario === 2) {
-            setCommSimMethod('CONFIGURED_PROFIT_PERCENTAGE');
-            setCommSimRate(10);
-            setCommSimCostBasis(2.40);
-            setCommSimRevenue(4.00);
-            setCommSimQuantity(2);
-            setCommSimUnit('PHYSICAL_SHEET');
-        } else if (scenario === 3) {
-            setCommSimMethod('FIXED_PER_UNIT');
-            setCommSimRate(0.25);
-            setCommSimRevenue(4.00);
-            setCommSimQuantity(2);
-            setCommSimUnit('PHYSICAL_SHEET');
-        } else if (scenario === 4) {
-            setCommSimMethod('REVENUE_PERCENTAGE');
-            setCommSimRate(10);
-            setCommSimRevenue(24.00);
-            setCommSimQuantity(2);
-            setCommSimUnit('PHYSICAL_SHEET');
-        }
-    };
-
-    // Calculate dynamic commission in simulator
-    const calculateCommSimQuote = () => {
-        let fee = 0;
-        let formula = '';
-        const revenue = Math.round(Number(commSimRevenue || 0) * 100) / 100;
-
-        if (commSimMethod === 'REVENUE_PERCENTAGE') {
-            fee = Math.round(revenue * (commSimRate / 100) * 100) / 100;
-            formula = `₹${revenue.toFixed(2)} × ${commSimRate}% = ₹${fee.toFixed(2)}`;
-        } else if (commSimMethod === 'CONFIGURED_PROFIT_PERCENTAGE') {
-            const cost = Math.round(Number(commSimCostBasis || 0) * 100) / 100;
-            const profit = Math.max(0, Math.round((revenue - cost) * 100) / 100);
-            fee = Math.round(profit * (commSimRate / 100) * 100) / 100;
-            formula = `max(₹${revenue.toFixed(2)} - ₹${cost.toFixed(2)}, 0) × ${commSimRate}% = ₹${profit.toFixed(2)} × ${commSimRate}% = ₹${fee.toFixed(2)}`;
-        } else if (commSimMethod === 'FIXED_PER_UNIT') {
-            fee = Math.round(commSimQuantity * commSimRate * 100) / 100;
-            formula = `${commSimQuantity} ${commSimUnit.toLowerCase().replace(/_/g, ' ')}(s) × ₹${commSimRate.toFixed(2)} = ₹${fee.toFixed(2)}`;
-        }
-
-        if (fee > revenue) {
-            fee = revenue;
-            formula += ` (capped at revenue ₹${revenue.toFixed(2)})`;
-        }
-        const shopNet = Math.round((revenue - fee) * 100) / 100;
-
-        return {
-            revenue,
-            fee,
-            shopNet,
-            formula,
-        };
     };
 
     // Handle Create Commission Rule
@@ -707,8 +727,6 @@ export default function DedicatedShopWorkspacePage() {
         DRAFT: { label: 'Draft (Admin Only)', bg: 'rgba(168, 85, 247, 0.12)', color: '#c084fc' },
         ARCHIVED: { label: 'Archived', bg: 'rgba(255, 255, 255, 0.08)', color: 'var(--fg-muted)' },
     }[shop.publishStatus] || { label: 'Draft', bg: 'rgba(168, 85, 247, 0.12)', color: '#c084fc' };
-
-    const simResult = calculateSimQuote();
 
     return (
         <div className="container" style={{ maxWidth: '1400px', margin: '0 auto', padding: '24px 16px 64px' }}>
@@ -920,7 +938,7 @@ export default function DedicatedShopWorkspacePage() {
                     {readinessExpanded && (
                         <div style={{
                             display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
                             gap: '12px',
                             marginTop: '18px',
                             paddingTop: '16px',
@@ -995,9 +1013,9 @@ export default function DedicatedShopWorkspacePage() {
             )}
 
             {/* Workspace Layout: Local Navigation Sidebar + Main Tab Content */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 240px) 1fr', gap: '24px', alignItems: 'start' }}>
+            <div className="shop-workspace-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 240px) 1fr', gap: '24px', alignItems: 'start' }}>
                 {/* Local Menu (Section 5.4) */}
-                <div className="card" style={{
+                <div className="card shop-workspace-tabs" style={{
                     padding: '12px',
                     borderRadius: '16px',
                     background: 'var(--bg-card)',
@@ -1109,27 +1127,6 @@ export default function DedicatedShopWorkspacePage() {
                         }}
                     >
                         <Percent size={16} /> Commission
-                    </button>
-
-                    <button
-                        onClick={() => setActiveTab('finance')}
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '10px',
-                            padding: '10px 14px',
-                            borderRadius: '10px',
-                            border: 'none',
-                            cursor: 'pointer',
-                            fontSize: '13px',
-                            fontWeight: activeTab === 'finance' ? '800' : '600',
-                            background: activeTab === 'finance' ? 'var(--accent-muted)' : 'transparent',
-                            color: activeTab === 'finance' ? 'var(--accent)' : 'var(--fg-muted)',
-                            textAlign: 'left',
-                            transition: 'all 0.15s',
-                        }}
-                    >
-                        <DollarSign size={16} /> Orders & Money
                     </button>
                 </div>
 
@@ -1437,19 +1434,113 @@ export default function DedicatedShopWorkspacePage() {
                                     </div>
                                 </div>
 
-                                {/* Photo URL */}
+                                {/* Shop Photo & 16:9 Storefront Preview */}
                                 <div>
-                                    <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '6px' }}>
-                                        Shop Photo / Thumbnail URL
+                                    <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '8px' }}>
+                                        Shop Storefront Photo & Thumbnail (16:9 Optimal)
                                     </label>
-                                    <input
-                                        type="text"
-                                        value={editPhotoUrl}
-                                        onChange={e => setEditPhotoUrl(e.target.value)}
-                                        placeholder="/shops/print-hub.svg or https://…"
-                                        className="input"
-                                        style={{ width: '100%', fontSize: '13px' }}
-                                    />
+
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px', alignItems: 'start', background: 'var(--bg-secondary)', padding: '14px', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                                        {/* 16:9 Preview Window */}
+                                        <div style={{
+                                            position: 'relative',
+                                            aspectRatio: '16 / 9',
+                                            maxHeight: '180px',
+                                            borderRadius: '10px',
+                                            overflow: 'hidden',
+                                            background: '#0c1017',
+                                            border: '1px solid var(--border)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                        }}>
+                                            {editPhotoUrl ? (
+                                                <>
+                                                    <img
+                                                        src={editPhotoUrl}
+                                                        alt="Storefront Preview"
+                                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                    />
+                                                    <span style={{
+                                                        position: 'absolute',
+                                                        bottom: 8,
+                                                        right: 8,
+                                                        background: 'rgba(0, 0, 0, 0.75)',
+                                                        color: '#fff',
+                                                        fontSize: '10.5px',
+                                                        fontWeight: '700',
+                                                        padding: '2px 8px',
+                                                        borderRadius: '6px',
+                                                        backdropFilter: 'blur(4px)',
+                                                    }}>
+                                                        16:9 Storefront
+                                                    </span>
+                                                </>
+                                            ) : (
+                                                <div style={{ textAlign: 'center', color: 'var(--fg-muted)', padding: '16px' }}>
+                                                    <ImageIcon size={32} style={{ opacity: 0.4, margin: '0 auto 6px' }} />
+                                                    <div style={{ fontSize: '12px', fontWeight: '600' }}>No Photo Configured</div>
+                                                    <div style={{ fontSize: '10.5px', opacity: 0.7, marginTop: '2px' }}>Upload a high-resolution 16:9 storefront picture</div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Action buttons & URL */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                <label className="btn btn-outline btn-sm" style={{ cursor: 'pointer', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '8px' }}>
+                                                    <UploadCloud size={14} /> Upload Picture
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        style={{ display: 'none' }}
+                                                        onChange={handleShopPhotoFileChange}
+                                                    />
+                                                </label>
+
+                                                {editPhotoUrl && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setCropImageSrc(editPhotoUrl);
+                                                            setCropFileInfo(null);
+                                                            setCropModalOpen(true);
+                                                        }}
+                                                        className="btn btn-outline btn-sm"
+                                                        style={{ fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '8px' }}
+                                                    >
+                                                        <Sliders size={14} /> Frame / Crop (16:9)
+                                                    </button>
+                                                )}
+
+                                                {editPhotoUrl && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setEditPhotoUrl('')}
+                                                        className="btn btn-outline btn-sm"
+                                                        style={{ fontSize: '12px', color: 'var(--error)', borderColor: 'rgba(239, 68, 68, 0.3)', padding: '7px 12px', borderRadius: '8px' }}
+                                                        title="Remove photo"
+                                                    >
+                                                        <Trash2 size={13} />
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            <div>
+                                                <label style={{ fontSize: '11px', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
+                                                    Or specify direct Image URL:
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={editPhotoUrl}
+                                                    onChange={e => setEditPhotoUrl(e.target.value)}
+                                                    placeholder="/shops/print-hub.svg or https://…"
+                                                    className="input"
+                                                    style={{ width: '100%', fontSize: '12.5px' }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
@@ -1531,92 +1622,49 @@ export default function DedicatedShopWorkspacePage() {
                                     </div>
                                 )}
 
-                                {/* Paper Filter Bar */}
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
-                                    <div style={{ display: 'flex', gap: '6px' }}>
-                                        {(['ALL', 'A4', 'A3', 'LEGAL'] as const).map(p => (
-                                            <button
-                                                key={p}
-                                                type="button"
-                                                onClick={() => setMatrixFilterPaper(p)}
-                                                className="btn btn-sm"
-                                                style={{
-                                                    fontSize: '11.5px',
-                                                    fontWeight: matrixFilterPaper === p ? '800' : '600',
-                                                    background: matrixFilterPaper === p ? 'var(--accent)' : 'var(--bg-secondary)',
-                                                    color: matrixFilterPaper === p ? '#092b31' : 'var(--fg-muted)',
-                                                    border: '1px solid var(--border)',
-                                                    borderRadius: '6px',
-                                                    padding: '4px 10px',
-                                                }}
-                                            >
-                                                {p === 'ALL' ? 'All Sizes' : p}
-                                            </button>
-                                        ))}
-                                    </div>
-
-                                    <div style={{ display: 'flex', gap: '8px' }}>
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                handleUseSamePrice('A4', 'BW');
-                                                handleUseSamePrice('A4', 'COLOUR');
-                                            }}
-                                            className="btn btn-outline btn-sm"
-                                            style={{ fontSize: '11.5px', padding: '4px 10px', borderRadius: '6px' }}
-                                            title="Sync Double Short Edge price to match Double Long Edge for A4"
-                                        >
-                                            <Copy size={12} style={{ marginRight: '4px' }} /> Copy Long → Short Edge (A4)
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Matrix Table */}
+                                {/* Matrix Table (A4 Unified Single & Double-Sided) */}
                                 <div style={{ overflowX: 'auto' }}>
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                                         <thead>
-                                            <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left', color: 'var(--fg-muted)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                                                <th style={{ padding: '8px 10px' }}>Paper Size</th>
-                                                <th style={{ padding: '8px 10px' }}>Color Mode</th>
-                                                <th style={{ padding: '8px 10px' }}>Sides</th>
-                                                <th style={{ padding: '8px 10px', textAlign: 'center' }}>Enabled</th>
-                                                <th style={{ padding: '8px 10px', textAlign: 'right' }}>Price / Sheet (₹)</th>
-                                                <th style={{ padding: '8px 10px', textAlign: 'center' }}>Action</th>
+                                            <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left', color: 'var(--fg-muted)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                <th style={{ padding: '10px 12px' }}>Paper Size</th>
+                                                <th style={{ padding: '10px 12px' }}>Color Mode</th>
+                                                <th style={{ padding: '10px 12px' }}>Sides</th>
+                                                <th style={{ padding: '10px 12px', textAlign: 'center' }}>Enabled</th>
+                                                <th style={{ padding: '10px 12px', textAlign: 'right' }}>Price / Sheet (₹)</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {matrixRows
-                                                .filter(r => matrixFilterPaper === 'ALL' || r.paper_size === matrixFilterPaper)
+                                                .filter(r => r.paper_size === 'A4')
                                                 .map(r => {
-                                                    const isShortEdge = r.sides === 'DOUBLE_SHORT_EDGE';
+                                                    const sideLabel = r.sides === 'SINGLE' ? 'Single-sided' : 'Double-sided';
                                                     return (
                                                         <tr key={`${r.paper_size}:${r.print_mode}:${r.sides}`} style={{ borderBottom: '1px solid var(--border)', background: r.active ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
-                                                            <td style={{ padding: '10px', fontWeight: '700' }}>
-                                                                <span style={{ padding: '2px 8px', borderRadius: '6px', background: 'var(--bg-secondary)', fontSize: '12px' }}>
+                                                            <td style={{ padding: '12px', fontWeight: '700' }}>
+                                                                <span style={{ padding: '3px 10px', borderRadius: '6px', background: 'var(--bg-secondary)', fontSize: '12.5px', fontWeight: '800' }}>
                                                                     {r.paper_size}
                                                                 </span>
                                                             </td>
-                                                            <td style={{ padding: '10px' }}>
-                                                                <span style={{ fontSize: '12px', fontWeight: '600', color: r.print_mode === 'COLOUR' ? '#38bdf8' : 'var(--fg)' }}>
+                                                            <td style={{ padding: '12px' }}>
+                                                                <span style={{ fontSize: '13px', fontWeight: '700', color: r.print_mode === 'COLOUR' ? '#38bdf8' : 'var(--fg)' }}>
                                                                     {r.print_mode === 'COLOUR' ? 'Colour' : 'Black & White'}
                                                                 </span>
                                                             </td>
-                                                            <td style={{ padding: '10px', fontSize: '12.5px' }}>
-                                                                {r.sides === 'SINGLE' && 'Single-sided'}
-                                                                {r.sides === 'DOUBLE_LONG_EDGE' && 'Double-sided (Long Edge)'}
-                                                                {r.sides === 'DOUBLE_SHORT_EDGE' && 'Double-sided (Short Edge)'}
+                                                            <td style={{ padding: '12px', fontSize: '13px', fontWeight: '600' }}>
+                                                                {sideLabel}
                                                             </td>
-                                                            <td style={{ padding: '10px', textAlign: 'center' }}>
+                                                            <td style={{ padding: '12px', textAlign: 'center' }}>
                                                                 <input
                                                                     type="checkbox"
                                                                     checked={r.active}
                                                                     onChange={() => handleMatrixActiveToggle(r.paper_size, r.print_mode, r.sides)}
-                                                                    style={{ cursor: 'pointer', transform: 'scale(1.1)' }}
+                                                                    style={{ cursor: 'pointer', transform: 'scale(1.15)' }}
                                                                 />
                                                             </td>
-                                                            <td style={{ padding: '10px', textAlign: 'right' }}>
+                                                            <td style={{ padding: '12px', textAlign: 'right' }}>
                                                                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                                                    <span style={{ color: 'var(--fg-muted)', fontSize: '12px' }}>₹</span>
+                                                                    <span style={{ color: 'var(--fg-muted)', fontSize: '13px', fontWeight: '700' }}>₹</span>
                                                                     <input
                                                                         type="number"
                                                                         step="0.25"
@@ -1626,30 +1674,15 @@ export default function DedicatedShopWorkspacePage() {
                                                                         disabled={!r.active}
                                                                         className="input"
                                                                         style={{
-                                                                            width: '84px',
+                                                                            width: '90px',
                                                                             textAlign: 'right',
                                                                             fontWeight: '800',
                                                                             fontSize: '13px',
-                                                                            padding: '4px 8px',
+                                                                            padding: '5px 10px',
                                                                             opacity: r.active ? 1 : 0.5,
                                                                         }}
                                                                     />
                                                                 </div>
-                                                            </td>
-                                                            <td style={{ padding: '10px', textAlign: 'center' }}>
-                                                                {isShortEdge ? (
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => handleUseSamePrice(r.paper_size, r.print_mode)}
-                                                                        className="btn btn-outline btn-sm"
-                                                                        style={{ fontSize: '11px', padding: '2px 8px' }}
-                                                                        title="Use Long Edge price"
-                                                                    >
-                                                                        Same as Long
-                                                                    </button>
-                                                                ) : (
-                                                                    <span style={{ fontSize: '11px', color: 'var(--fg-muted)' }}>—</span>
-                                                                )}
                                                             </td>
                                                         </tr>
                                                     );
@@ -1658,195 +1691,20 @@ export default function DedicatedShopWorkspacePage() {
                                     </table>
                                 </div>
                             </div>
-
-                            {/* Section 6.3 Arithmetic Quote Simulator */}
-                            <div className="card" style={{ padding: '20px', borderRadius: '16px', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
-                                    <h3 style={{ fontSize: '15px', fontWeight: '800', margin: 0, color: 'var(--fg)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <Sliders size={16} style={{ color: 'var(--accent)' }} /> Arithmetic Quote Simulator (Section 6.3)
-                                    </h3>
-                                    <span style={{ fontSize: '11.5px', color: 'var(--fg-muted)' }}>
-                                        Exact server-side arithmetic engine simulation
-                                    </span>
-                                </div>
-
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '16px' }}>
-                                    <div>
-                                        <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)' }}>Document Pages</label>
-                                        <input
-                                            type="number"
-                                            min={1}
-                                            value={simPages}
-                                            onChange={e => setSimPages(Math.max(1, parseInt(e.target.value) || 1))}
-                                            className="input"
-                                            style={{ width: '100%', fontSize: '13px', marginTop: '4px' }}
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)' }}>Pages / Side</label>
-                                        <select
-                                            value={simPagesPerSide}
-                                            onChange={e => setSimPagesPerSide(parseInt(e.target.value))}
-                                            className="input"
-                                            style={{ width: '100%', fontSize: '13px', marginTop: '4px' }}
-                                        >
-                                            <option value={1}>1 (Standard)</option>
-                                            <option value={2}>2-up</option>
-                                            <option value={4}>4-up</option>
-                                            <option value={6}>6-up</option>
-                                            <option value={9}>9-up</option>
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)' }}>Paper Size</label>
-                                        <select
-                                            value={simPaperSize}
-                                            onChange={e => setSimPaperSize(e.target.value as any)}
-                                            className="input"
-                                            style={{ width: '100%', fontSize: '13px', marginTop: '4px' }}
-                                        >
-                                            <option value="A4">A4</option>
-                                            <option value="A3">A3</option>
-                                            <option value="LEGAL">Legal</option>
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)' }}>Color Mode</label>
-                                        <select
-                                            value={simMode}
-                                            onChange={e => setSimMode(e.target.value as any)}
-                                            className="input"
-                                            style={{ width: '100%', fontSize: '13px', marginTop: '4px' }}
-                                        >
-                                            <option value="BW">Black & White</option>
-                                            <option value="COLOUR">Colour</option>
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)' }}>Sidedness</label>
-                                        <select
-                                            value={simSides}
-                                            onChange={e => setSimSides(e.target.value as any)}
-                                            className="input"
-                                            style={{ width: '100%', fontSize: '13px', marginTop: '4px' }}
-                                        >
-                                            <option value="SINGLE">Single-sided</option>
-                                            <option value="DOUBLE_LONG_EDGE">Double (Long Edge)</option>
-                                            <option value="DOUBLE_SHORT_EDGE">Double (Short Edge)</option>
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)' }}>Copies</label>
-                                        <input
-                                            type="number"
-                                            min={1}
-                                            value={simCopies}
-                                            onChange={e => setSimCopies(Math.max(1, parseInt(e.target.value) || 1))}
-                                            className="input"
-                                            style={{ width: '100%', fontSize: '13px', marginTop: '4px' }}
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Addons in Simulator */}
-                                {addons.length > 0 && (
-                                    <div style={{ marginBottom: '16px', padding: '12px 14px', borderRadius: '12px', background: 'var(--bg-secondary)' }}>
-                                        <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--fg)', display: 'block', marginBottom: '8px' }}>
-                                            Include Finishing Add-ons in Quote:
-                                        </label>
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                                            {addons.map(a => {
-                                                const aId = a.id || a.addon_id;
-                                                const aName = a.name || a.addons?.name || 'Add-on';
-                                                const aPrice = Number(a.price || 0);
-                                                const isChecked = simSelectedAddons.includes(aId);
-                                                return (
-                                                    <label key={aId} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer', background: 'var(--bg-card)', padding: '6px 10px', borderRadius: '8px', border: `1px solid ${isChecked ? 'var(--accent)' : 'var(--border)'}` }}>
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={isChecked}
-                                                            onChange={e => {
-                                                                if (e.target.checked) setSimSelectedAddons(prev => [...prev, aId]);
-                                                                else setSimSelectedAddons(prev => prev.filter(id => id !== aId));
-                                                            }}
-                                                        />
-                                                        <span>{aName} (+₹{aPrice.toFixed(2)})</span>
-                                                    </label>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Simulator Calculation & Breakdown Display */}
-                                <div style={{
-                                    padding: '16px',
-                                    borderRadius: '12px',
-                                    background: 'var(--bg-secondary)',
-                                    border: '1px solid var(--border)',
-                                }}>
-                                    {'error' in simResult ? (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f59e0b', fontSize: '13px', fontWeight: '600' }}>
-                                            <AlertCircle size={18} />
-                                            <span>{simResult.error}</span>
-                                        </div>
-                                    ) : (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
-                                                <div>
-                                                    <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--fg-muted)', fontWeight: '700', letterSpacing: '0.04em' }}>
-                                                        Imposition & Sheet Arithmetic
-                                                    </div>
-                                                    <div style={{ fontSize: '13px', color: 'var(--fg)', marginTop: '4px' }}>
-                                                        <strong>{simPages}</strong> pages ÷ <strong>{simPagesPerSide}</strong>/side = <strong>{simResult.printedSidesPerCopy}</strong> printed side(s) → <strong>{simResult.sheetsPerCopy}</strong> sheet(s)/copy × <strong>{simCopies}</strong> copies = <strong>{simResult.totalPhysicalSheets}</strong> physical sheet(s)
-                                                    </div>
-                                                </div>
-                                                <div style={{ textAlign: 'right' }}>
-                                                    <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--fg-muted)', fontWeight: '700' }}>
-                                                        Customer Total Quote
-                                                    </div>
-                                                    <div style={{ fontSize: '24px', fontWeight: '900', color: 'var(--accent)', marginTop: '2px' }}>
-                                                        ₹{simResult.totalAmount.toFixed(2)}
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '1px solid var(--border)', fontSize: '12px', color: 'var(--fg-muted)', flexWrap: 'wrap', gap: '8px' }}>
-                                                <div>
-                                                    <span>Printing: <strong>₹{simResult.printingAmount.toFixed(2)}</strong> ({simResult.totalPhysicalSheets} × ₹{simResult.rate})</span>
-                                                    {simResult.addonsAmount > 0 && (
-                                                        <span style={{ marginLeft: '12px' }}>Add-ons: <strong>+₹{simResult.addonsAmount.toFixed(2)}</strong></span>
-                                                    )}
-                                                </div>
-                                                <div>
-                                                    <span>Platform Fee ({simResult.commissionPct}%): <strong>₹{simResult.commissionAmount.toFixed(2)}</strong></span>
-                                                    <span style={{ margin: '0 8px' }}>•</span>
-                                                    <span style={{ color: '#22c55e', fontWeight: '700' }}>Vendor Net: ₹{simResult.vendorNet.toFixed(2)}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
                         </div>
                     )}
 
-                    {/* TAB 4: ADD-ONS */}
+                    {/* TAB 4: ADD-ONS & FINISHING SERVICES */}
                     {activeTab === 'addons' && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                            <div className="card" style={{ padding: '20px', borderRadius: '16px', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+                            <div className="card" style={{ padding: '24px', borderRadius: '16px', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
                                     <div>
-                                        <h3 style={{ fontSize: '16px', fontWeight: '800', margin: 0, color: 'var(--fg)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <Sparkles size={17} style={{ color: 'var(--accent)' }} /> Assigned Shop Add-ons
+                                        <h3 style={{ fontSize: '18px', fontWeight: '800', margin: 0, color: 'var(--fg)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            Shop services
                                         </h3>
-                                        <p style={{ fontSize: '12px', color: 'var(--fg-muted)', margin: '4px 0 0' }}>
-                                            Finishing services offered by this shop with shop-specific pricing and availability.
+                                        <p style={{ fontSize: '12.5px', color: 'var(--fg-muted)', margin: '4px 0 0' }}>
+                                            Active Catalog ({addons.length})
                                         </p>
                                     </div>
                                     <div style={{ display: 'flex', gap: '10px' }}>
@@ -1858,19 +1716,16 @@ export default function DedicatedShopWorkspacePage() {
                                                 background: 'var(--accent)',
                                                 color: '#092b31',
                                                 fontWeight: '800',
-                                                fontSize: '12.5px',
-                                                padding: '8px 16px',
+                                                fontSize: '13px',
+                                                padding: '8px 18px',
                                                 display: 'inline-flex',
                                                 alignItems: 'center',
                                                 gap: '6px',
-                                                borderRadius: '8px',
+                                                borderRadius: '10px',
                                             }}
                                         >
-                                            <Plus size={14} /> Assign Add-on from Catalogue
+                                            <Plus size={15} /> Add service
                                         </button>
-                                        <Link href="/admin/addons" className="btn btn-outline btn-sm" style={{ fontSize: '12px', borderRadius: '8px', padding: '8px 14px' }}>
-                                            Global Catalogue →
-                                        </Link>
                                     </div>
                                 </div>
 
@@ -1889,92 +1744,486 @@ export default function DedicatedShopWorkspacePage() {
                                     </div>
                                 )}
 
-                                {/* Assign Add-on Panel */}
+                                {/* Add Service Panel */}
                                 {assignModalOpen && (
-                                    <form onSubmit={handleAssignAddon} style={{ padding: '16px', borderRadius: '12px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', marginBottom: '16px' }}>
-                                        <h4 style={{ fontSize: '14px', fontWeight: '800', margin: '0 0 10px', color: 'var(--fg)' }}>
-                                            Assign Service from Global Catalogue
-                                        </h4>
-                                        {availableCatalogue.length === 0 ? (
-                                            <p style={{ fontSize: '12.5px', color: 'var(--fg-muted)', margin: 0 }}>
-                                                All active catalogue add-ons are already assigned to this shop.
-                                            </p>
-                                        ) : (
-                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', alignItems: 'end' }}>
+                                    <div style={{ padding: '20px', borderRadius: '14px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', marginBottom: '20px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setAddServiceMode('custom')}
+                                                    style={{
+                                                        padding: '6px 14px',
+                                                        borderRadius: '8px',
+                                                        fontSize: '12.5px',
+                                                        fontWeight: '700',
+                                                        cursor: 'pointer',
+                                                        background: addServiceMode === 'custom' ? 'var(--accent)' : 'transparent',
+                                                        color: addServiceMode === 'custom' ? '#092b31' : 'var(--fg-muted)',
+                                                        border: `1px solid ${addServiceMode === 'custom' ? 'var(--accent)' : 'var(--border)'}`,
+                                                    }}
+                                                >
+                                                    Create Custom Service
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setAddServiceMode('catalogue')}
+                                                    style={{
+                                                        padding: '6px 14px',
+                                                        borderRadius: '8px',
+                                                        fontSize: '12.5px',
+                                                        fontWeight: '700',
+                                                        cursor: 'pointer',
+                                                        background: addServiceMode === 'catalogue' ? 'var(--accent)' : 'transparent',
+                                                        color: addServiceMode === 'catalogue' ? '#092b31' : 'var(--fg-muted)',
+                                                        border: `1px solid ${addServiceMode === 'catalogue' ? 'var(--accent)' : 'var(--border)'}`,
+                                                    }}
+                                                >
+                                                    Pick from System Catalogue
+                                                </button>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setAssignModalOpen(false)}
+                                                style={{ background: 'none', border: 'none', color: 'var(--fg-muted)', cursor: 'pointer' }}
+                                            >
+                                                <X size={18} />
+                                            </button>
+                                        </div>
+
+                                        <form onSubmit={handleAssignAddon}>
+                                            {addServiceMode === 'custom' ? (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                                                        <div>
+                                                            <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
+                                                                Service Name *
+                                                            </label>
+                                                            <input
+                                                                type="text"
+                                                                placeholder="e.g. Spiral Binding"
+                                                                value={customName}
+                                                                onChange={e => setCustomName(e.target.value)}
+                                                                required
+                                                                className="input"
+                                                                style={{ width: '100%', fontSize: '13px' }}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
+                                                                Shop Price (₹) *
+                                                            </label>
+                                                            <input
+                                                                type="number"
+                                                                step="0.5"
+                                                                min="0"
+                                                                value={customPrice}
+                                                                onChange={e => setCustomPrice(e.target.value)}
+                                                                required
+                                                                className="input"
+                                                                style={{ width: '100%', fontSize: '13px' }}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
+                                                                Extra Prep Time (mins)
+                                                            </label>
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                value={customPrepTime}
+                                                                onChange={e => setCustomPrepTime(e.target.value)}
+                                                                className="input"
+                                                                style={{ width: '100%', fontSize: '13px' }}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
+                                                                Page Bounds (Min – Max)
+                                                            </label>
+                                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                                <input
+                                                                    type="number"
+                                                                    min="1"
+                                                                    value={customMinPages}
+                                                                    onChange={e => setCustomMinPages(e.target.value)}
+                                                                    placeholder="Min"
+                                                                    className="input"
+                                                                    style={{ width: '100%', fontSize: '13px' }}
+                                                                />
+                                                                <span style={{ color: 'var(--fg-muted)' }}>–</span>
+                                                                <input
+                                                                    type="number"
+                                                                    min="1"
+                                                                    value={customMaxPages}
+                                                                    onChange={e => setCustomMaxPages(e.target.value)}
+                                                                    placeholder="Max"
+                                                                    className="input"
+                                                                    style={{ width: '100%', fontSize: '13px' }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div>
+                                                        <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
+                                                            Description (Optional)
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Short details shown to customers at checkout"
+                                                            value={customDescription}
+                                                            onChange={e => setCustomDescription(e.target.value)}
+                                                            className="input"
+                                                            style={{ width: '100%', fontSize: '13px' }}
+                                                        />
+                                                    </div>
+
+                                                    <div>
+                                                        <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '6px' }}>
+                                                            Service Image (Optional)
+                                                        </label>
+                                                        <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                            {customImageUrl ? (
+                                                                <div style={{ position: 'relative', width: '68px', height: '68px', borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--border)', flexShrink: 0 }}>
+                                                                    <img src={customImageUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setCustomImageUrl('')}
+                                                                        style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(0,0,0,0.7)', border: 'none', borderRadius: '50%', color: '#fff', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}
+                                                                        title="Remove image"
+                                                                    >
+                                                                        <X size={12} />
+                                                                    </button>
+                                                                </div>
+                                                            ) : (
+                                                                <div style={{ width: '68px', height: '68px', borderRadius: '10px', border: '1px dashed var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--fg-muted)', flexShrink: 0, background: 'var(--bg-card)' }}>
+                                                                    <ImageIcon size={24} style={{ opacity: 0.4 }} />
+                                                                </div>
+                                                            )}
+                                                            <div style={{ flex: 1, minWidth: '220px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                                    <label className="btn btn-outline btn-sm" style={{ cursor: 'pointer', fontSize: '11.5px', display: 'inline-flex', alignItems: 'center', gap: '6px', borderRadius: '8px', padding: '6px 12px' }}>
+                                                                        <UploadCloud size={14} /> Upload Image
+                                                                        <input
+                                                                            type="file"
+                                                                            accept="image/*"
+                                                                            style={{ display: 'none' }}
+                                                                            onChange={handleCustomImageFileChange}
+                                                                        />
+                                                                    </label>
+                                                                    <span style={{ fontSize: '11px', color: 'var(--fg-muted)' }}>or paste an image URL below</span>
+                                                                </div>
+                                                                <input
+                                                                    type="url"
+                                                                    placeholder="https://... (direct image link)"
+                                                                    value={customImageUrl}
+                                                                    onChange={e => setCustomImageUrl(e.target.value)}
+                                                                    className="input"
+                                                                    style={{ width: '100%', fontSize: '12px' }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '6px' }}>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setAssignModalOpen(false)}
+                                                            className="btn btn-outline"
+                                                            style={{ fontSize: '12.5px', borderRadius: '8px' }}
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                        <button
+                                                            type="submit"
+                                                            disabled={assigningAddon || !customName.trim()}
+                                                            className="btn"
+                                                            style={{ background: 'var(--accent)', color: '#092b31', fontWeight: '800', fontSize: '12.5px', padding: '8px 20px', borderRadius: '8px' }}
+                                                        >
+                                                            {assigningAddon ? 'Creating…' : 'Create & Add Service'}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ) : (
                                                 <div>
-                                                    <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
-                                                        Select Service
-                                                    </label>
-                                                    <select
-                                                        value={assignAddonId}
-                                                        onChange={e => setAssignAddonId(e.target.value)}
-                                                        className="input"
-                                                        required
-                                                        style={{ width: '100%', fontSize: '13px' }}
-                                                    >
-                                                        <option value="">-- Choose an add-on --</option>
-                                                        {availableCatalogue.map(c => (
-                                                            <option key={c.id} value={c.id}>
-                                                                {c.name} ({c.min_pages || 1}–{c.max_pages || '∞'} pages)
-                                                            </option>
-                                                        ))}
-                                                    </select>
+                                                    {availableCatalogue.length === 0 ? (
+                                                        <p style={{ fontSize: '12.5px', color: 'var(--fg-muted)', margin: '8px 0 16px' }}>
+                                                            All active catalogue add-ons are already assigned to this shop. You can create a custom service instead.
+                                                        </p>
+                                                    ) : (
+                                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', alignItems: 'end' }}>
+                                                            <div>
+                                                                <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
+                                                                    Select Service
+                                                                </label>
+                                                                <select
+                                                                    value={assignAddonId}
+                                                                    onChange={e => setAssignAddonId(e.target.value)}
+                                                                    className="input"
+                                                                    required
+                                                                    style={{ width: '100%', fontSize: '13px' }}
+                                                                >
+                                                                    <option value="">-- Choose an add-on --</option>
+                                                                    {availableCatalogue.map(c => (
+                                                                        <option key={c.id} value={c.id}>
+                                                                            {c.name} ({c.min_pages || 1}–{c.max_pages || '∞'} pages)
+                                                                        </option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
+
+                                                            <div>
+                                                                <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
+                                                                    This Shop's Price (₹)
+                                                                </label>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.5"
+                                                                    min="0"
+                                                                    value={assignPrice}
+                                                                    onChange={e => setAssignPrice(e.target.value)}
+                                                                    required
+                                                                    className="input"
+                                                                    style={{ width: '100%', fontSize: '13px' }}
+                                                                />
+                                                            </div>
+
+                                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                                <button
+                                                                    type="submit"
+                                                                    disabled={assigningAddon || !assignAddonId}
+                                                                    className="btn"
+                                                                    style={{ background: 'var(--accent)', color: '#092b31', fontWeight: '800', fontSize: '12.5px', padding: '8px 18px', borderRadius: '8px' }}
+                                                                >
+                                                                    {assigningAddon ? 'Assigning…' : 'Add to Shop'}
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setAssignModalOpen(false)}
+                                                                    className="btn btn-outline"
+                                                                    style={{ fontSize: '12px', borderRadius: '8px' }}
+                                                                >
+                                                                    Cancel
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </form>
+                                    </div>
+                                )}
+
+                                {/* Edit Service Modal / Card */}
+                                {editingAddon && (
+                                    <div style={{
+                                        padding: '20px',
+                                        borderRadius: '14px',
+                                        background: 'var(--bg-secondary)',
+                                        border: '1px solid var(--accent)',
+                                        marginBottom: '20px',
+                                        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
+                                    }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                            <h4 style={{ fontSize: '15px', fontWeight: '800', margin: 0, color: 'var(--fg)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <Edit2 size={16} style={{ color: 'var(--accent)' }} /> Edit Service: {editingAddon.name || editingAddon.addons?.name}
+                                            </h4>
+                                            <button
+                                                type="button"
+                                                onClick={() => setEditingAddon(null)}
+                                                style={{ background: 'none', border: 'none', color: 'var(--fg-muted)', cursor: 'pointer' }}
+                                            >
+                                                <X size={18} />
+                                            </button>
+                                        </div>
+
+                                        <form onSubmit={handleSaveEditAddon}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                                                    <div>
+                                                        <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
+                                                            Service Name *
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            value={editAddonName}
+                                                            onChange={e => setEditAddonName(e.target.value)}
+                                                            required
+                                                            className="input"
+                                                            style={{ width: '100%', fontSize: '13px' }}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
+                                                            Shop Price (₹) *
+                                                        </label>
+                                                        <input
+                                                            type="number"
+                                                            step="0.5"
+                                                            min="0"
+                                                            value={editAddonPrice}
+                                                            onChange={e => setEditAddonPrice(e.target.value)}
+                                                            required
+                                                            className="input"
+                                                            style={{ width: '100%', fontSize: '13px' }}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
+                                                            Extra Prep Time (mins)
+                                                        </label>
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            value={editAddonPrepTime}
+                                                            onChange={e => setEditAddonPrepTime(e.target.value)}
+                                                            className="input"
+                                                            style={{ width: '100%', fontSize: '13px' }}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
+                                                            Page Bounds (Min – Max)
+                                                        </label>
+                                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                            <input
+                                                                type="number"
+                                                                min="1"
+                                                                value={editAddonMinPages}
+                                                                onChange={e => setEditAddonMinPages(e.target.value)}
+                                                                placeholder="Min"
+                                                                className="input"
+                                                                style={{ width: '100%', fontSize: '13px' }}
+                                                            />
+                                                            <span style={{ color: 'var(--fg-muted)' }}>–</span>
+                                                            <input
+                                                                type="number"
+                                                                min="1"
+                                                                value={editAddonMaxPages}
+                                                                onChange={e => setEditAddonMaxPages(e.target.value)}
+                                                                placeholder="Max"
+                                                                className="input"
+                                                                style={{ width: '100%', fontSize: '13px' }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'center' }}>
+                                                    <div>
+                                                        <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
+                                                            Description
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            value={editAddonDescription}
+                                                            onChange={e => setEditAddonDescription(e.target.value)}
+                                                            placeholder="Short details shown to customers at checkout"
+                                                            className="input"
+                                                            style={{ width: '100%', fontSize: '13px' }}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '8px' }}>
+                                                            Service Status
+                                                        </label>
+                                                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={editAddonAvailable}
+                                                                onChange={e => setEditAddonAvailable(e.target.checked)}
+                                                            />
+                                                            <span>{editAddonAvailable ? 'Active' : 'Inactive'}</span>
+                                                        </label>
+                                                    </div>
                                                 </div>
 
                                                 <div>
-                                                    <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
-                                                        This Shop's Price (₹)
+                                                    <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '6px' }}>
+                                                        Service Image (Optional)
                                                     </label>
-                                                    <input
-                                                        type="number"
-                                                        step="0.5"
-                                                        min="0"
-                                                        value={assignPrice}
-                                                        onChange={e => setAssignPrice(e.target.value)}
-                                                        required
-                                                        className="input"
-                                                        style={{ width: '100%', fontSize: '13px' }}
-                                                    />
+                                                    <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                        {editAddonImageUrl ? (
+                                                            <div style={{ position: 'relative', width: '68px', height: '68px', borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--border)', flexShrink: 0 }}>
+                                                                <img src={editAddonImageUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setEditAddonImageUrl('')}
+                                                                    style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(0,0,0,0.7)', border: 'none', borderRadius: '50%', color: '#fff', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}
+                                                                    title="Remove image"
+                                                                >
+                                                                    <X size={12} />
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <div style={{ width: '68px', height: '68px', borderRadius: '10px', border: '1px dashed var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--fg-muted)', flexShrink: 0, background: 'var(--bg-card)' }}>
+                                                                <ImageIcon size={24} style={{ opacity: 0.4 }} />
+                                                            </div>
+                                                        )}
+                                                        <div style={{ flex: 1, minWidth: '220px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                                <label className="btn btn-outline btn-sm" style={{ cursor: 'pointer', fontSize: '11.5px', display: 'inline-flex', alignItems: 'center', gap: '6px', borderRadius: '8px', padding: '6px 12px' }}>
+                                                                    <UploadCloud size={14} /> Upload Image
+                                                                    <input
+                                                                        type="file"
+                                                                        accept="image/*"
+                                                                        style={{ display: 'none' }}
+                                                                        onChange={handleEditAddonImageFileChange}
+                                                                    />
+                                                                </label>
+                                                                <span style={{ fontSize: '11px', color: 'var(--fg-muted)' }}>or paste an image URL below</span>
+                                                            </div>
+                                                            <input
+                                                                type="url"
+                                                                placeholder="https://... (direct image link)"
+                                                                value={editAddonImageUrl}
+                                                                onChange={e => setEditAddonImageUrl(e.target.value)}
+                                                                className="input"
+                                                                style={{ width: '100%', fontSize: '12px' }}
+                                                            />
+                                                        </div>
+                                                    </div>
                                                 </div>
 
-                                                <div style={{ display: 'flex', gap: '8px' }}>
-                                                    <button
-                                                        type="submit"
-                                                        disabled={assigningAddon || !assignAddonId}
-                                                        className="btn"
-                                                        style={{ background: 'var(--accent)', color: '#092b31', fontWeight: '800', fontSize: '12.5px', padding: '8px 16px', borderRadius: '8px' }}
-                                                    >
-                                                        {assigningAddon ? 'Assigning…' : 'Add to Shop'}
-                                                    </button>
+                                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '8px' }}>
                                                     <button
                                                         type="button"
-                                                        onClick={() => setAssignModalOpen(false)}
+                                                        onClick={() => setEditingAddon(null)}
                                                         className="btn btn-outline"
-                                                        style={{ fontSize: '12px', borderRadius: '8px' }}
+                                                        style={{ fontSize: '12.5px', borderRadius: '8px' }}
                                                     >
                                                         Cancel
                                                     </button>
+                                                    <button
+                                                        type="submit"
+                                                        disabled={savingAddon || !editAddonName.trim()}
+                                                        className="btn"
+                                                        style={{ background: 'var(--accent)', color: '#092b31', fontWeight: '800', fontSize: '12.5px', padding: '8px 20px', borderRadius: '8px' }}
+                                                    >
+                                                        {savingAddon ? 'Saving…' : 'Save Changes'}
+                                                    </button>
                                                 </div>
                                             </div>
-                                        )}
-                                    </form>
+                                        </form>
+                                    </div>
                                 )}
 
                                 {addons.length === 0 ? (
-                                    <div style={{ padding: '36px 16px', textAlign: 'center', color: 'var(--fg-muted)', fontSize: '13px' }}>
-                                        No custom add-ons assigned to this shop yet. Use "Assign Add-on from Catalogue" above to enable finishing services.
+                                    <div style={{ padding: '48px 16px', textAlign: 'center', color: 'var(--fg-muted)', fontSize: '13px' }}>
+                                        No custom add-ons assigned to this shop yet. Use "+ Add service" above to configure finishing services.
                                     </div>
                                 ) : (
                                     <div style={{ overflowX: 'auto' }}>
                                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                                             <thead>
-                                                <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left', color: 'var(--fg-muted)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                                                    <th style={{ padding: '8px 10px' }}>Service Name</th>
-                                                    <th style={{ padding: '8px 10px' }}>Prep Time</th>
-                                                    <th style={{ padding: '8px 10px' }}>Page Limits</th>
-                                                    <th style={{ padding: '8px 10px', textAlign: 'right' }}>Shop Price</th>
-                                                    <th style={{ padding: '8px 10px', textAlign: 'center' }}>Availability</th>
-                                                    <th style={{ padding: '8px 10px', textAlign: 'center' }}>Action</th>
+                                                <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left', color: 'var(--fg-muted)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                    <th style={{ padding: '12px 14px' }}>ADD-ON</th>
+                                                    <th style={{ padding: '12px 14px' }}>PRICE</th>
+                                                    <th style={{ padding: '12px 14px' }}>EXTRA PREP TIME</th>
+                                                    <th style={{ padding: '12px 14px' }}>PAGE BOUNDS</th>
+                                                    <th style={{ padding: '12px 14px' }}>STATUS</th>
+                                                    <th style={{ padding: '12px 14px', textAlign: 'right' }}>ACTIONS</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -1987,55 +2236,114 @@ export default function DedicatedShopWorkspacePage() {
                                                     const max = a.max_pages ?? a.addons?.max_pages ?? 1000;
                                                     const price = Number(a.price || 0);
                                                     const isAvailable = a.is_available !== undefined ? a.is_available : (a.available !== undefined ? a.available : true);
+                                                    const itemImg = a.image_url || a.imageUrl || a.addons?.image_url;
 
                                                     return (
-                                                        <tr key={saId} style={{ borderBottom: '1px solid var(--border)' }}>
-                                                            <td style={{ padding: '12px 10px' }}>
-                                                                <div style={{ fontWeight: '700', color: 'var(--fg)' }}>{name}</div>
-                                                                {desc && <div style={{ fontSize: '11.5px', color: 'var(--fg-muted)', marginTop: '2px' }}>{desc}</div>}
+                                                        <tr key={saId} style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.15s' }}>
+                                                            <td style={{ padding: '14px' }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                                    {itemImg ? (
+                                                                        <div style={{
+                                                                            width: '36px',
+                                                                            height: '36px',
+                                                                            borderRadius: '10px',
+                                                                            overflow: 'hidden',
+                                                                            border: '1px solid var(--border)',
+                                                                            flexShrink: 0,
+                                                                        }}>
+                                                                            <img src={itemImg} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div style={{
+                                                                            width: '36px',
+                                                                            height: '36px',
+                                                                            borderRadius: '10px',
+                                                                            background: 'rgba(56, 189, 248, 0.1)',
+                                                                            color: 'var(--accent)',
+                                                                            display: 'flex',
+                                                                            alignItems: 'center',
+                                                                            justifyContent: 'center',
+                                                                            flexShrink: 0,
+                                                                        }}>
+                                                                            <Layers size={18} />
+                                                                        </div>
+                                                                    )}
+                                                                    <div>
+                                                                        <div style={{ fontWeight: '700', color: 'var(--fg)', fontSize: '13.5px' }}>{name}</div>
+                                                                        {desc && <div style={{ fontSize: '11.5px', color: 'var(--fg-muted)', marginTop: '2px' }}>{desc}</div>}
+                                                                    </div>
+                                                                </div>
                                                             </td>
-                                                            <td style={{ padding: '12px 10px', color: 'var(--fg-muted)', fontSize: '12px' }}>
-                                                                {prep > 0 ? `+${prep} mins` : 'Instant'}
-                                                            </td>
-                                                            <td style={{ padding: '12px 10px', color: 'var(--fg-muted)', fontSize: '12px' }}>
-                                                                {min}–{max} pages
-                                                            </td>
-                                                            <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: '800', color: 'var(--fg)' }}>
+                                                            <td style={{ padding: '14px', fontWeight: '800', color: 'var(--fg)', fontSize: '13.5px' }}>
                                                                 ₹{price.toFixed(2)}
                                                             </td>
-                                                            <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                                                            <td style={{ padding: '14px', color: 'var(--fg)', fontSize: '13px' }}>
+                                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                                                                    <Clock size={13} style={{ color: 'var(--fg-muted)' }} />
+                                                                    <span>{prep > 0 ? `${prep} mins` : 'Instant'}</span>
+                                                                </span>
+                                                            </td>
+                                                            <td style={{ padding: '14px', color: 'var(--fg-muted)', fontSize: '13px' }}>
+                                                                {min} - {max}
+                                                            </td>
+                                                            <td style={{ padding: '14px' }}>
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => handleToggleAddonAvailability(saId, isAvailable)}
                                                                     style={{
                                                                         cursor: 'pointer',
-                                                                        border: 'none',
-                                                                        fontSize: '11px',
-                                                                        fontWeight: '700',
-                                                                        padding: '4px 9px',
-                                                                        borderRadius: '6px',
+                                                                        border: `1px solid ${isAvailable ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
                                                                         background: isAvailable ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.12)',
                                                                         color: isAvailable ? '#22c55e' : 'var(--error)',
+                                                                        fontWeight: '700',
+                                                                        fontSize: '11.5px',
+                                                                        padding: '4px 12px',
+                                                                        borderRadius: '999px',
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '5px',
                                                                     }}
                                                                 >
-                                                                    {isAvailable ? '✓ Available' : '✕ Unavailable'}
+                                                                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: isAvailable ? '#22c55e' : 'var(--error)' }} />
+                                                                    {isAvailable ? 'Active' : 'Inactive'}
                                                                 </button>
                                                             </td>
-                                                            <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => handleDeleteAddon(saId)}
-                                                                    style={{
-                                                                        cursor: 'pointer',
-                                                                        background: 'none',
-                                                                        border: 'none',
-                                                                        color: 'var(--error)',
-                                                                        padding: '4px',
-                                                                    }}
-                                                                    title="Remove add-on from this shop"
-                                                                >
-                                                                    <Trash2 size={15} />
-                                                                </button>
+                                                            <td style={{ padding: '14px', textAlign: 'right' }}>
+                                                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleStartEditAddon(a)}
+                                                                        className="btn btn-outline btn-sm"
+                                                                        style={{
+                                                                            fontSize: '12px',
+                                                                            padding: '5px 12px',
+                                                                            borderRadius: '8px',
+                                                                            display: 'inline-flex',
+                                                                            alignItems: 'center',
+                                                                            gap: '5px',
+                                                                        }}
+                                                                    >
+                                                                        <Edit2 size={13} /> Edit
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleDeleteAddon(saId)}
+                                                                        style={{
+                                                                            cursor: 'pointer',
+                                                                            background: 'rgba(239, 68, 68, 0.08)',
+                                                                            border: '1px solid rgba(239, 68, 68, 0.2)',
+                                                                            color: 'var(--error)',
+                                                                            padding: '6px 8px',
+                                                                            borderRadius: '8px',
+                                                                            display: 'inline-flex',
+                                                                            alignItems: 'center',
+                                                                            justifyContent: 'center',
+                                                                        }}
+                                                                        title="Delete service"
+                                                                    >
+                                                                        <Trash2 size={14} />
+                                                                    </button>
+                                                                </div>
                                                             </td>
                                                         </tr>
                                                     );
@@ -2187,210 +2495,21 @@ export default function DedicatedShopWorkspacePage() {
                                 </div>
                             )}
 
-                            {/* Section 8.1 & 8.2: Interactive Commission Simulator */}
-                            <div className="card" style={{ padding: '20px', borderRadius: '16px', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+                            {/* Modern & Friendly Commission Engine */}
+                            <div className="card" style={{ padding: '24px', borderRadius: '16px', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
                                     <div>
-                                        <h3 style={{ fontSize: '15px', fontWeight: '800', margin: 0, color: 'var(--fg)' }}>
-                                            Interactive Before / After Calculator (Astraplan Section 8.2)
+                                        <h3 style={{ fontSize: '16px', fontWeight: '800', margin: 0, color: 'var(--fg)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <Percent size={18} style={{ color: 'var(--accent)' }} /> Commission Model & Rate Customizer
                                         </h3>
-                                        <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--fg-muted)' }}>
-                                            Simulates mathematical models and verifies exact rounding invariants before publishing rules.
+                                        <p style={{ margin: '3px 0 0', fontSize: '12px', color: 'var(--fg-muted)' }}>
+                                            Adjust the platform fee percentage XerService charges on completed orders for this shop.
                                         </p>
                                     </div>
-                                    <span style={{ fontSize: '11px', background: 'var(--accent-muted)', color: 'var(--accent)', padding: '3px 8px', borderRadius: '6px', fontWeight: '700' }}>
-                                        Section 8.2 Verified
+                                    <span style={{ fontSize: '11px', background: 'var(--accent-muted)', color: 'var(--accent)', padding: '3px 10px', borderRadius: '8px', fontWeight: '700' }}>
+                                        Interactive Customizer
                                     </span>
                                 </div>
-
-                                {/* Astraplan Worked Example Presets */}
-                                <div style={{ marginBottom: '16px', padding: '12px 14px', borderRadius: '12px', background: 'var(--bg-secondary)' }}>
-                                    <div style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                                        One-Click Astraplan 8.2 Worked Examples:
-                                    </div>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                                        <button
-                                            type="button"
-                                            onClick={() => loadScenarioPreset(1)}
-                                            className="btn btn-outline btn-sm"
-                                            style={{ fontSize: '11.5px', borderRadius: '8px' }}
-                                        >
-                                            Example 1: 10% Revenue (₹4 sale → ₹0.40 fee, ₹3.60 shop)
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => loadScenarioPreset(2)}
-                                            className="btn btn-outline btn-sm"
-                                            style={{ fontSize: '11.5px', borderRadius: '8px' }}
-                                        >
-                                            Example 2: 10% Profit (Cost ₹2.40 → ₹0.16 fee, ₹3.84 shop)
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => loadScenarioPreset(3)}
-                                            className="btn btn-outline btn-sm"
-                                            style={{ fontSize: '11.5px', borderRadius: '8px' }}
-                                        >
-                                            Example 3: ₹0.25 / Sheet (2 sheets = ₹4 → ₹0.50 fee, ₹3.50 shop)
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => loadScenarioPreset(4)}
-                                            className="btn btn-outline btn-sm"
-                                            style={{ fontSize: '11.5px', borderRadius: '8px' }}
-                                        >
-                                            Example 4: Mixed (₹24 sale → ₹1.40 fee, ₹22.60 shop)
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Simulator Inputs */}
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '16px' }}>
-                                    <div>
-                                        <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
-                                            Calculation Method
-                                        </label>
-                                        <select
-                                            value={commSimMethod}
-                                            onChange={e => setCommSimMethod(e.target.value as any)}
-                                            className="input"
-                                            style={{ width: '100%', fontSize: '13px' }}
-                                        >
-                                            <option value="REVENUE_PERCENTAGE">Percentage of Revenue</option>
-                                            <option value="CONFIGURED_PROFIT_PERCENTAGE">Percentage of Configured Profit</option>
-                                            <option value="FIXED_PER_UNIT">Fixed Amount per Unit</option>
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
-                                            Customer Sale Amount (₹)
-                                        </label>
-                                        <input
-                                            type="number"
-                                            step="0.1"
-                                            min={0}
-                                            value={commSimRevenue}
-                                            onChange={e => setCommSimRevenue(Math.max(0, parseFloat(e.target.value) || 0))}
-                                            className="input"
-                                            style={{ width: '100%', fontSize: '13px' }}
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
-                                            {commSimMethod === 'FIXED_PER_UNIT' ? 'Fixed Fee per Unit (₹)' : 'Commission Percentage (%)'}
-                                        </label>
-                                        <input
-                                            type="number"
-                                            step={commSimMethod === 'FIXED_PER_UNIT' ? '0.05' : '0.5'}
-                                            min={0}
-                                            value={commSimRate}
-                                            onChange={e => setCommSimRate(Math.max(0, parseFloat(e.target.value) || 0))}
-                                            className="input"
-                                            style={{ width: '100%', fontSize: '13px' }}
-                                        />
-                                    </div>
-
-                                    {commSimMethod === 'CONFIGURED_PROFIT_PERCENTAGE' && (
-                                        <div>
-                                            <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
-                                                Configured Direct Cost Basis (₹)
-                                            </label>
-                                            <input
-                                                type="number"
-                                                step="0.1"
-                                                min={0}
-                                                value={commSimCostBasis}
-                                                onChange={e => setCommSimCostBasis(Math.max(0, parseFloat(e.target.value) || 0))}
-                                                className="input"
-                                                style={{ width: '100%', fontSize: '13px' }}
-                                            />
-                                        </div>
-                                    )}
-
-                                    {commSimMethod === 'FIXED_PER_UNIT' && (
-                                        <>
-                                            <div>
-                                                <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
-                                                    Quantity
-                                                </label>
-                                                <input
-                                                    type="number"
-                                                    min={1}
-                                                    value={commSimQuantity}
-                                                    onChange={e => setCommSimQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                                                    className="input"
-                                                    style={{ width: '100%', fontSize: '13px' }}
-                                                />
-                                            </div>
-                                            <div>
-                                                <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
-                                                    Unit Type
-                                                </label>
-                                                <select
-                                                    value={commSimUnit}
-                                                    onChange={e => setCommSimUnit(e.target.value as any)}
-                                                    className="input"
-                                                    style={{ width: '100%', fontSize: '13px' }}
-                                                >
-                                                    <option value="PHYSICAL_SHEET">Physical Sheet</option>
-                                                    <option value="PRINTED_SIDE">Printed Side</option>
-                                                    <option value="DOCUMENT_PAGE">Document Page</option>
-                                                    <option value="SERVICE_UNIT">Service Unit / Item</option>
-                                                </select>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-
-                                {/* Simulator Calculation Results Display */}
-                                {(() => {
-                                    const calc = calculateCommSimQuote();
-                                    return (
-                                        <div style={{ padding: '16px', borderRadius: '12px', background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '12px' }}>
-                                                <div>
-                                                    <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--fg-muted)', fontWeight: '700' }}>
-                                                        Mathematical Calculation Formula
-                                                    </div>
-                                                    <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--fg)', marginTop: '2px' }}>
-                                                        {calc.formula}
-                                                    </div>
-                                                </div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e', padding: '3px 8px', borderRadius: '6px', fontWeight: '700' }}>
-                                                    <CheckCircle2 size={13} />
-                                                    <span>Gross (₹{calc.revenue.toFixed(2)}) = Fee (₹{calc.fee.toFixed(2)}) + Net (₹{calc.shopNet.toFixed(2)})</span>
-                                                </div>
-                                            </div>
-
-                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
-                                                <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-                                                    <div style={{ fontSize: '11px', color: 'var(--fg-muted)', fontWeight: '700' }}>Customer Gross</div>
-                                                    <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--fg)' }}>₹{calc.revenue.toFixed(2)}</div>
-                                                </div>
-                                                <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-                                                    <div style={{ fontSize: '11px', color: 'var(--fg-muted)', fontWeight: '700' }}>XerService Platform Fee</div>
-                                                    <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--accent)' }}>₹{calc.fee.toFixed(2)}</div>
-                                                </div>
-                                                <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-                                                    <div style={{ fontSize: '11px', color: 'var(--fg-muted)', fontWeight: '700' }}>Shop Net Earnings</div>
-                                                    <div style={{ fontSize: '18px', fontWeight: '800', color: '#22c55e' }}>₹{calc.shopNet.toFixed(2)}</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })()}
-                            </div>
-
-                            {/* Section 8.1: Publish / Adjust Commission Rule Form */}
-                            <div className="card" style={{ padding: '20px', borderRadius: '16px', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-                                <h3 style={{ fontSize: '15px', fontWeight: '800', margin: '0 0 6px', color: 'var(--fg)' }}>
-                                    Publish New Commission Policy
-                                </h3>
-                                <p style={{ margin: '0 0 16px', fontSize: '12px', color: 'var(--fg-muted)' }}>
-                                    Creates a versioned rule for this shop. Overlapping active dates are automatically prevented.
-                                </p>
 
                                 {ruleFeedback && (
                                     <div style={{
@@ -2407,72 +2526,246 @@ export default function DedicatedShopWorkspacePage() {
                                     </div>
                                 )}
 
-                                <form onSubmit={handleCreateRule}>
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '16px' }}>
-                                        <div>
-                                            <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
-                                                Commission Rate (%)
-                                            </label>
+                                {/* Rate Preset Pills */}
+                                <div style={{ marginBottom: '18px' }}>
+                                    <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                        Quick Select Plan / Preset:
+                                    </label>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                        {[
+                                            { pct: '5', label: '5% Partner' },
+                                            { pct: '8', label: '8% Preferred' },
+                                            { pct: '10', label: '10% Standard' },
+                                            { pct: '12', label: '12% High-Volume' },
+                                            { pct: '15', label: '15% Starter' },
+                                        ].map(preset => {
+                                            const isSelected = newRuleRate === preset.pct;
+                                            return (
+                                                <button
+                                                    key={preset.pct}
+                                                    type="button"
+                                                    onClick={() => setNewRuleRate(preset.pct)}
+                                                    style={{
+                                                        padding: '6px 14px',
+                                                        borderRadius: '8px',
+                                                        border: isSelected ? '1px solid var(--accent)' : '1px solid var(--border)',
+                                                        background: isSelected ? 'var(--accent)' : 'var(--bg-secondary)',
+                                                        color: isSelected ? '#092b31' : 'var(--fg)',
+                                                        fontWeight: '700',
+                                                        fontSize: '12px',
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.15s ease',
+                                                    }}
+                                                >
+                                                    {preset.label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Slider + Numeric Input */}
+                                <div style={{ background: 'var(--bg-secondary)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border)', marginBottom: '18px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                        <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--fg)' }}>
+                                            Platform Commission Rate
+                                        </label>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                             <input
                                                 type="number"
-                                                step="0.01"
-                                                min={0}
-                                                max={100}
-                                                required
+                                                step="0.1"
+                                                min="0"
+                                                max="100"
                                                 value={newRuleRate}
                                                 onChange={e => setNewRuleRate(e.target.value)}
                                                 className="input"
-                                                style={{ width: '100%', fontSize: '13px' }}
+                                                style={{ width: '70px', textAlign: 'right', fontWeight: '800', fontSize: '14px', padding: '4px 8px' }}
                                             />
-                                        </div>
-
-                                        <div>
-                                            <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
-                                                Effective From
-                                            </label>
-                                            <input
-                                                type="date"
-                                                required
-                                                value={newRuleEffectiveFrom}
-                                                onChange={e => setNewRuleEffectiveFrom(e.target.value)}
-                                                className="input"
-                                                style={{ width: '100%', fontSize: '13px' }}
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
-                                                Effective To (Optional)
-                                            </label>
-                                            <input
-                                                type="date"
-                                                value={newRuleEffectiveTo}
-                                                onChange={e => setNewRuleEffectiveTo(e.target.value)}
-                                                className="input"
-                                                style={{ width: '100%', fontSize: '13px' }}
-                                            />
+                                            <span style={{ fontWeight: '800', fontSize: '14px', color: 'var(--accent)' }}>%</span>
                                         </div>
                                     </div>
 
-                                    <div style={{ marginBottom: '16px' }}>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: 'var(--fg)', cursor: 'pointer' }}>
-                                            <input
-                                                type="checkbox"
-                                                checked={newRuleClosePrevious}
-                                                onChange={e => setNewRuleClosePrevious(e.target.checked)}
-                                            />
-                                            <span>Safely close previous active rule at Effective From date (prevents overlap conflict)</span>
-                                        </label>
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max="30"
+                                        step="0.5"
+                                        value={Math.min(30, Math.max(0, parseFloat(newRuleRate) || 0))}
+                                        onChange={e => setNewRuleRate(e.target.value)}
+                                        style={{ width: '100%', accentColor: 'var(--accent)', cursor: 'pointer' }}
+                                    />
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--fg-muted)', marginTop: '4px' }}>
+                                        <span>0% (Free)</span>
+                                        <span>10% (Standard)</span>
+                                        <span>20%</span>
+                                        <span>30%</span>
+                                    </div>
+                                </div>
+
+                                {/* Live Earnings Split Preview */}
+                                {(() => {
+                                    const rateNum = Math.max(0, Math.min(100, parseFloat(newRuleRate) || 0));
+                                    const orderGross = Math.max(0, commSimOrderAmount || 0);
+                                    const xerFee = Math.round(orderGross * (rateNum / 100) * 100) / 100;
+                                    const vendorNet = Math.round((orderGross - xerFee) * 100) / 100;
+                                    const vendorPct = Math.max(0, 100 - rateNum);
+
+                                    return (
+                                        <div style={{ background: 'var(--bg-secondary)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border)', marginBottom: '18px' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                                                <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--fg)' }}>
+                                                    Order Revenue Split Simulation
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    <span style={{ fontSize: '11.5px', color: 'var(--fg-muted)' }}>Simulate Order:</span>
+                                                    {[50, 100, 250, 500].map(amt => (
+                                                        <button
+                                                            key={amt}
+                                                            type="button"
+                                                            onClick={() => setCommSimOrderAmount(amt)}
+                                                            className="btn btn-outline btn-sm"
+                                                            style={{
+                                                                fontSize: '11px',
+                                                                padding: '2px 7px',
+                                                                borderRadius: '6px',
+                                                                background: commSimOrderAmount === amt ? 'var(--accent-muted)' : 'transparent',
+                                                                color: commSimOrderAmount === amt ? 'var(--accent)' : 'var(--fg-muted)',
+                                                            }}
+                                                        >
+                                                            ₹{amt}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Visual Two-Tone Split Bar */}
+                                            <div style={{ height: '24px', borderRadius: '8px', overflow: 'hidden', display: 'flex', background: 'var(--border)', marginBottom: '14px' }}>
+                                                <div
+                                                    style={{
+                                                        width: `${vendorPct}%`,
+                                                        background: '#10b981',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        color: '#fff',
+                                                        fontSize: '11px',
+                                                        fontWeight: '800',
+                                                        transition: 'width 0.2s ease',
+                                                    }}
+                                                    title={`Vendor: ${vendorPct.toFixed(1)}%`}
+                                                >
+                                                    {vendorPct >= 20 ? `Shop ${vendorPct.toFixed(1)}%` : ''}
+                                                </div>
+                                                <div
+                                                    style={{
+                                                        width: `${rateNum}%`,
+                                                        background: 'var(--accent)',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        color: '#092b31',
+                                                        fontSize: '11px',
+                                                        fontWeight: '800',
+                                                        transition: 'width 0.2s ease',
+                                                    }}
+                                                    title={`XerService Fee: ${rateNum.toFixed(1)}%`}
+                                                >
+                                                    {rateNum >= 12 ? `Fee ${rateNum.toFixed(1)}%` : ''}
+                                                </div>
+                                            </div>
+
+                                            {/* 3 Metric Cards */}
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
+                                                <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+                                                    <div style={{ fontSize: '11px', color: 'var(--fg-muted)', fontWeight: '700' }}>Customer Gross</div>
+                                                    <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--fg)' }}>₹{orderGross.toFixed(2)}</div>
+                                                </div>
+                                                <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+                                                    <div style={{ fontSize: '11px', color: 'var(--accent)', fontWeight: '700' }}>XerService Fee ({rateNum}%)</div>
+                                                    <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--accent)' }}>₹{xerFee.toFixed(2)}</div>
+                                                </div>
+                                                <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+                                                    <div style={{ fontSize: '11px', color: '#10b981', fontWeight: '700' }}>Shop Net ({vendorPct.toFixed(1)}%)</div>
+                                                    <div style={{ fontSize: '18px', fontWeight: '800', color: '#10b981' }}>₹{vendorNet.toFixed(2)}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
+                                {/* Apply Form & Advanced Scheduling */}
+                                <form onSubmit={handleCreateRule}>
+                                    <div style={{ marginBottom: '14px' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowAdvancedScheduling(prev => !prev)}
+                                            style={{ background: 'none', border: 'none', color: 'var(--fg-muted)', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', padding: 0 }}
+                                        >
+                                            {showAdvancedScheduling ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                            {showAdvancedScheduling ? 'Hide Advanced Scheduling' : 'Advanced Scheduling (Custom Dates)'}
+                                        </button>
                                     </div>
 
-                                    <button
-                                        type="submit"
-                                        disabled={creatingRule}
-                                        className="btn"
-                                        style={{ background: 'var(--accent)', color: '#092b31', fontWeight: '800', fontSize: '13px', padding: '9px 20px', borderRadius: '8px' }}
-                                    >
-                                        {creatingRule ? 'Publishing Policy…' : 'Publish Commission Policy'}
-                                    </button>
+                                    {showAdvancedScheduling && (
+                                        <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border)', marginBottom: '16px' }}>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '10px' }}>
+                                                <div>
+                                                    <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
+                                                        Effective From
+                                                    </label>
+                                                    <input
+                                                        type="date"
+                                                        required
+                                                        value={newRuleEffectiveFrom}
+                                                        onChange={e => setNewRuleEffectiveFrom(e.target.value)}
+                                                        className="input"
+                                                        style={{ width: '100%', fontSize: '13px' }}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--fg-muted)', display: 'block', marginBottom: '4px' }}>
+                                                        Effective To (Optional)
+                                                    </label>
+                                                    <input
+                                                        type="date"
+                                                        value={newRuleEffectiveTo}
+                                                        onChange={e => setNewRuleEffectiveTo(e.target.value)}
+                                                        className="input"
+                                                        style={{ width: '100%', fontSize: '13px' }}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--fg)', cursor: 'pointer' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={newRuleClosePrevious}
+                                                    onChange={e => setNewRuleClosePrevious(e.target.checked)}
+                                                />
+                                                <span>Safely close previous active rule at Effective From date</span>
+                                            </label>
+                                        </div>
+                                    )}
+
+                                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                        <button
+                                            type="submit"
+                                            disabled={creatingRule}
+                                            className="btn"
+                                            style={{
+                                                background: 'var(--accent)',
+                                                color: '#092b31',
+                                                fontWeight: '800',
+                                                fontSize: '13px',
+                                                padding: '10px 24px',
+                                                borderRadius: '8px',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '6px',
+                                            }}
+                                        >
+                                            <Check size={16} /> {creatingRule ? 'Applying Rate…' : `Apply ${newRuleRate}% Commission Rate`}
+                                        </button>
+                                    </div>
                                 </form>
                             </div>
 
@@ -2529,63 +2822,6 @@ export default function DedicatedShopWorkspacePage() {
                                             </tbody>
                                         </table>
                                     </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* TAB 6: ORDERS & MONEY */}
-                    {activeTab === 'finance' && (
-                        <div className="card" style={{ padding: '20px', borderRadius: '16px', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                                <h3 style={{ fontSize: '16px', fontWeight: '800', margin: 0, color: 'var(--fg)' }}>
-                                    Financial Ledger & Settlements
-                                </h3>
-                                <Link href="/admin/settlements" className="btn btn-outline btn-sm" style={{ fontSize: '12px' }}>
-                                    View Platform Settlements →
-                                </Link>
-                            </div>
-
-                            {ledgers.length === 0 ? (
-                                <div style={{ padding: '36px 16px', textAlign: 'center', color: 'var(--fg-muted)', fontSize: '13px' }}>
-                                    No financial ledger entries for this shop yet.
-                                </div>
-                            ) : (
-                                <div style={{ overflowX: 'auto' }}>
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                                        <thead>
-                                            <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left', color: 'var(--fg-muted)', fontSize: '11.5px', textTransform: 'uppercase' }}>
-                                                <th style={{ padding: '10px 12px' }}>Order #</th>
-                                                <th style={{ padding: '10px 12px' }}>Date</th>
-                                                <th style={{ padding: '10px 12px', textAlign: 'right' }}>Gross Sales</th>
-                                                <th style={{ padding: '10px 12px', textAlign: 'right' }}>Fee Amount</th>
-                                                <th style={{ padding: '10px 12px', textAlign: 'right' }}>Vendor Net</th>
-                                                <th style={{ padding: '10px 12px', textAlign: 'center' }}>Settlement State</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {ledgers.map(l => (
-                                                <tr key={l.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                                                    <td style={{ padding: '12px', fontWeight: '700', fontFamily: 'monospace' }}>{l.orderNumber}</td>
-                                                    <td style={{ padding: '12px', color: 'var(--fg-muted)', fontSize: '12px' }}>
-                                                        {new Date(l.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                                                    </td>
-                                                    <td style={{ padding: '12px', textAlign: 'right' }}>₹{l.grossAmount.toFixed(2)}</td>
-                                                    <td style={{ padding: '12px', textAlign: 'right', color: 'var(--accent)' }}>
-                                                        ₹{(l.platformCommissionAmount || 0).toFixed(2)}
-                                                    </td>
-                                                    <td style={{ padding: '12px', textAlign: 'right', fontWeight: '800', color: '#22c55e' }}>
-                                                        ₹{(l.vendorNetAmount || 0).toFixed(2)}
-                                                    </td>
-                                                    <td style={{ padding: '12px', textAlign: 'center' }}>
-                                                        <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 7px', borderRadius: '6px', background: l.financialStatus === 'SETTLED' ? 'rgba(34, 197, 94, 0.12)' : 'rgba(234, 179, 8, 0.12)', color: l.financialStatus === 'SETTLED' ? '#22c55e' : '#eab308' }}>
-                                                            {l.financialStatus}
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
                                 </div>
                             )}
                         </div>
@@ -2950,6 +3186,17 @@ export default function DedicatedShopWorkspacePage() {
                     </div>
                 </div>
             )}
+
+            <ShopPhotoCropModal
+                open={cropModalOpen}
+                imageSrc={cropImageSrc}
+                fileInfo={cropFileInfo}
+                onClose={() => setCropModalOpen(false)}
+                onSave={(croppedDataUrl) => {
+                    setEditPhotoUrl(croppedDataUrl);
+                    setCropModalOpen(false);
+                }}
+            />
         </div>
     );
 }

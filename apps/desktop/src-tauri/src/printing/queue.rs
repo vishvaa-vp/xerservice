@@ -231,12 +231,18 @@ pub fn get_native_print_queue(printer_id: Option<&str>) -> Result<Vec<PrintQueue
         }
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         use std::process::Command;
 
+        let lpstat_bin = if std::path::Path::new("/usr/bin/lpstat").exists() {
+            "/usr/bin/lpstat"
+        } else {
+            "lpstat"
+        };
+
         // Query active not-completed queue via safe process invocation (zero shell)
-        let mut cmd = Command::new("/usr/bin/lpstat");
+        let mut cmd = Command::new(lpstat_bin);
         cmd.arg("-l").arg("-W").arg("not-completed");
         if let Some(pid) = printer_id {
             cmd.arg("-o").arg(pid);
@@ -244,10 +250,10 @@ pub fn get_native_print_queue(printer_id: Option<&str>) -> Result<Vec<PrintQueue
 
         let output = cmd.output().map_err(|e| {
             println!(
-                "[RUST_IPC_HANDLER] STAGE_E_QUEUE_QUERY_FAILED: Failed to execute /usr/bin/lpstat: {}",
-                e
+                "[RUST_IPC_HANDLER] STAGE_E_QUEUE_QUERY_FAILED: Failed to execute {}: {}",
+                lpstat_bin, e
             );
-            format!("Failed to execute /usr/bin/lpstat: {}", e)
+            format!("Failed to execute {}: {}", lpstat_bin, e)
         })?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -265,7 +271,87 @@ pub fn get_native_print_queue(printer_id: Option<&str>) -> Result<Vec<PrintQueue
         Ok(items)
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+
+        let ps_cmd = match printer_id {
+            Some(pid) => {
+                let escaped = pid.replace('\'', "''");
+                format!(
+                    "Get-PrintJob -PrinterName '{}' | Select-Object Id, DocumentName, JobStatus, TotalPages, PagesPrinted, SubmittedTime, UserName | ConvertTo-Json -Compress",
+                    escaped
+                )
+            }
+            None => "Get-PrintJob | Select-Object Id, DocumentName, JobStatus, TotalPages, PagesPrinted, SubmittedTime, UserName, PrinterName | ConvertTo-Json -Compress".to_string(),
+        };
+
+        let mut items = Vec::new();
+
+        if let Ok(output) = Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &ps_cmd])
+            .output()
+        {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !stdout.is_empty() && stdout != "null" {
+                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&stdout) {
+                        let raw_items: Vec<&serde_json::Value> = match &parsed {
+                            serde_json::Value::Array(arr) => arr.iter().collect(),
+                            serde_json::Value::Object(_) => vec![&parsed],
+                            _ => Vec::new(),
+                        };
+
+                        for raw in raw_items {
+                            let id_num = raw.get("Id").and_then(|v| v.as_i64()).map(|n| n.to_string()).unwrap_or_default();
+                            let doc_name = raw.get("DocumentName").and_then(|v| v.as_str()).map(|s| s.to_string());
+                            let status_str = raw.get("JobStatus").and_then(|v| v.as_str()).unwrap_or("");
+                            let pages = raw.get("TotalPages").and_then(|v| v.as_u64()).map(|p| p as u32);
+                            let owner = raw.get("UserName").and_then(|v| v.as_str()).map(|s| s.to_string());
+                            let item_printer = raw.get("PrinterName").and_then(|v| v.as_str()).unwrap_or(printer_id.unwrap_or("unknown"));
+
+                            let lower_st = status_str.to_lowercase();
+                            let canonical_status = if lower_st.contains("print") || lower_st.contains("spool") {
+                                "PRINTING"
+                            } else if lower_st.contains("pause") || lower_st.contains("block") {
+                                "HELD"
+                            } else if lower_st.contains("error") || lower_st.contains("paper") {
+                                "FAILED"
+                            } else {
+                                "QUEUED"
+                            };
+
+                            let is_managed = is_xer_service_managed(&id_num)
+                                || doc_name.as_ref().map(|d| d.contains("XerService")).unwrap_or(false);
+
+                            items.push(PrintQueueItem {
+                                job_id: id_num,
+                                printer_id: item_printer.to_string(),
+                                status: canonical_status.to_string(),
+                                title: doc_name,
+                                submitted_at: raw.get("SubmittedTime").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                                owner,
+                                pages,
+                                size_bytes: None,
+                                message: Some(format!("Windows Spooler: {}", status_str)),
+                                managed_by_xer_service: is_managed,
+                                cancellable: is_managed,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        println!(
+            "[RUST_IPC_HANDLER] STAGE_E_QUEUE_QUERY_COMPLETED: Found {} jobs in Windows print queue",
+            items.len()
+        );
+
+        Ok(items)
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         Ok(Vec::new())
     }

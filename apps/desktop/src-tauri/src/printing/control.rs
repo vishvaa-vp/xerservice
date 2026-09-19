@@ -140,19 +140,25 @@ pub fn cancel_native_print_job(
         .as_deref()
         .unwrap_or(job_id);
 
-    println!(
-        "[RUST_IPC_HANDLER] STAGE_E_CUPS_CANCEL: Executing Command::new(\"/usr/bin/cancel\").arg(\"{}\")",
-        cancel_target
-    );
-
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         use std::process::Command;
 
-        let output = Command::new("/usr/bin/cancel")
+        let cancel_bin = if std::path::Path::new("/usr/bin/cancel").exists() {
+            "/usr/bin/cancel"
+        } else {
+            "cancel"
+        };
+
+        println!(
+            "[RUST_IPC_HANDLER] STAGE_E_CUPS_CANCEL: Executing Command::new(\"{}\").arg(\"{}\")",
+            cancel_bin, cancel_target
+        );
+
+        let output = Command::new(cancel_bin)
             .arg(cancel_target)
             .output()
-            .map_err(|e| format!("Failed to execute /usr/bin/cancel: {}", e))?;
+            .map_err(|e| format!("Failed to execute {}: {}", cancel_bin, e))?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -162,6 +168,29 @@ pub fn cancel_native_print_job(
             stdout.trim(),
             stderr.trim()
         );
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+
+        let target_printer = printer_id.or(pre_status.printer_id.as_deref());
+        let ps_cmd = match target_printer {
+            Some(p) => {
+                let escaped = p.replace('\'', "''");
+                format!("Remove-PrintJob -PrinterName '{}' -ID {}", escaped, cancel_target)
+            }
+            None => format!("Get-PrintJob | Where-Object {{ $_.Id -eq {} -or $_.DocumentName -like '*{}*' }} | Remove-PrintJob", cancel_target, job_id),
+        };
+
+        println!(
+            "[RUST_IPC_HANDLER] STAGE_E_WIN_CANCEL: Executing powershell -Command \"{}\"",
+            ps_cmd
+        );
+
+        let _ = Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &ps_cmd])
+            .output();
     }
 
     // 5. Follow-up status query to verify genuine cancellation

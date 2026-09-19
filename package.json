@@ -8,9 +8,9 @@
     "prebuild": "node scripts/prepare-pdfjs.cjs",
     "dev": "next dev",
     "build": "next build",
-    "build:apps": "pnpm --filter @apps/user build && pnpm --filter @apps/admin build && pnpm --filter @apps/vendor build",
     "build:desktop": "pnpm --filter @apps/desktop build",
-    "build:all": "pnpm build && pnpm build:apps && pnpm build:desktop",
+    "package:desktop": "pnpm --filter @apps/desktop bundle:dmg",
+    "build:all": "pnpm build && pnpm build:desktop",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
@@ -18,7 +18,8 @@
     "test:unit": "node scripts/test-pricing-engine.mjs && node scripts/test-printing-package.mjs && node scripts/test-whatsapp-security.mjs",
     "audit:publication": "node scripts/audit-publication.mjs",
     "check": "pnpm audit:publication && pnpm typecheck && pnpm test:unit",
-    "palette": "node scripts/palette-server.mjs"
+    "palette": "node scripts/palette-server.mjs",
+    "desktop": "pnpm --filter @apps/desktop tauri dev"
   },
   "dependencies": {
     "@packages/backend": "workspace:*",
@@ -44,6 +45,7 @@
     "@types/react-dom": "^18",
     "eslint": "^8",
     "eslint-config-next": "15.5.24",
+    "puppeteer-core": "^25.11.0",
     "typescript": "^5"
   },
   "pnpm": {

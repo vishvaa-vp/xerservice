@@ -15,6 +15,7 @@ import './mobile.css';
 export default function RootClient({ children }: { children: ReactNode }) {
     const { isLoading, authInitialized } = useApp();
     const pathname = usePathname();
+    const customerSurface = !/^\/(admin|xad|vendor)(\/|$)/.test(pathname);
     const navigation = !pathname.startsWith('/auth/') && pathname !== '/signup' && !pathname.startsWith('/vendor') && !pathname.includes('/login') && !pathname.startsWith('/admin') && !pathname.startsWith('/xad') && pathname !== '/forgot-password';
     const isReady = authInitialized && !isLoading;
 
@@ -22,7 +23,7 @@ export default function RootClient({ children }: { children: ReactNode }) {
         <>
             <BrandLoader ready={isReady} />
             {(
-                <div className={`page-wrapper app-frame ${navigation ? 'has-mobile-navigation' : ''}`} data-page={pathname}>
+                <div className={`page-wrapper app-frame ${customerSurface ? 'customer-surface' : ''} ${navigation ? 'has-mobile-navigation' : ''}`} data-page={pathname}>
                     <Suspense fallback={null}><Navbar /></Suspense>
                     <main><CustomerBoundary>{children}</CustomerBoundary></main><Feedback />
                     <Footer />

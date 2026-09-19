@@ -173,25 +173,18 @@
 }
 
 /* Multi-document Switcher */
-.docSelectorRow {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 16px;
-}
-
-.docSelect {
-    flex: 1;
-    padding: 10px 14px;
-    border-radius: 10px;
-    background: var(--surface-hover);
-    border: 1px solid var(--border);
-    color: var(--fg);
-    font-size: 14px;
-    font-weight: 600;
-    outline: none;
-    cursor: pointer;
-}
+.docSelectorRow { min-width: 0; margin-bottom: 16px; }
+.docSelectorLabel { margin: 0 0 10px; font-size: 13px; font-weight: 700; color: var(--fg-muted); }
+.docChoices { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 8px; }
+.docChoice { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 64px; padding: 12px; text-align: left; color: var(--fg); background: var(--surface-hover); border: 1px solid var(--border); border-radius: 12px; cursor: pointer; }
+.docChoice[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-muted); box-shadow: inset 0 0 0 1px var(--accent); }
+.docChoice:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.docNumber { display: grid; place-items: center; flex: 0 0 28px; height: 28px; border-radius: 8px; background: var(--surface); font-weight: 800; }
+.docInfo { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.docInfo strong { font-size: 13px; overflow-wrap: anywhere; }
+.docInfo > span { font-size: 12px; color: var(--fg-muted); }
+.settingsActions { display: flex; flex-wrap: wrap; gap: 8px; }
+.settingsActions .editSettingsBtn { margin: 0; text-decoration: none; }
 
 /* Preview Box */
 .previewContainer {
@@ -650,24 +643,127 @@
     }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
     .pageContainer {
-        padding: 20px 14px 100px;
+        padding: 16px 14px calc(130px + env(safe-area-inset-bottom));
     }
 
     .pageTitle {
-        font-size: 24px;
+        font-size: 22px;
+    }
+
+    .breadcrumb {
+        font-size: 12px;
+        flex-wrap: wrap;
+        gap: 6px;
     }
 
     .card {
         padding: 18px 16px;
+        border-radius: 16px;
+    }
+
+    .shopBox {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .badgeVerified {
+        margin-left: auto;
     }
 
     .printSettingsGrid {
         grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    .settingVal {
+        white-space: normal;
+        line-height: 1.3;
+        font-size: 12px;
     }
 
     .paymentCard {
         padding: 20px 16px;
+        border-radius: 18px;
     }
+
+    .payBtn,
+    .payButton {
+        min-height: 52px;
+        font-size: 16px;
+        font-weight: 800;
+        border-radius: 12px;
+    }
+
+    /* Mobile Payment Success Receipt */
+    .successCard {
+        margin: 10px 0 32px;
+        padding: 24px 16px;
+        border-radius: 20px;
+        width: 100%;
+        max-width: 100%;
+        gap: 16px;
+    }
+
+    .successTitle {
+        font-size: 22px;
+    }
+
+    .successIconWrap {
+        width: 58px;
+        height: 58px;
+    }
+
+    .successDetails {
+        padding: 14px;
+        border-radius: 12px;
+        gap: 8px;
+    }
+
+    .successActions {
+        gap: 10px;
+    }
+
+    .successActions .btn {
+        width: 100%;
+        min-height: 48px;
+        font-size: 14px;
+        font-weight: 700;
+        border-radius: 12px;
+    }
+}
+
+/* Constrain intrinsic document widths, not just the visible page overflow. */
+@media (max-width: 768px) {
+    .layoutGrid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+    .contentWrapper { gap: 18px; }
+    .mainColumn, .sidebarColumn, .card, .paymentCard, .previewContainer,
+    .shopBox > div, .settingPill { min-width: 0; max-width: 100%; }
+    .cardHeader { flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
+    .cardHeader svg { flex-shrink: 0; }
+    .cardTitle { font-size: 15px; }
+    .shopName, .shopMeta, .successSub { overflow-wrap: anywhere; }
+    .shopBox > div:nth-child(2) { flex-basis: calc(100% - 56px) !important; }
+    .previewContainer { padding: 12px; align-items: stretch; }
+    .printSettingsGrid, .methodTabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .settingsActions { width: 100%; }
+    .settingsActions > * { flex: 1; min-height: 44px; }
+    .summaryRow, .totalRow, .walletRow { gap: 12px; }
+    .summaryRow > :first-child { min-width: 0; overflow-wrap: anywhere; }
+    .summaryRowVal, .totalAmount { flex-shrink: 0; text-align: right; }
+    .successDetails .summaryRowVal { flex-shrink: 1; overflow-wrap: anywhere; }
+    .methodTab, .cartBtn { min-height: 48px; }
+    .trustBadge { text-align: center; line-height: 1.5; }
+    .trustIcon { flex-shrink: 0; }
+    .bannerNotice { flex-wrap: wrap; overflow-wrap: anywhere; }
+    .successCard { box-shadow: var(--shadow-sm); }
+    .successCard :global(.order-chat) { width: 100%; text-align: left; }
+    .successCard :global(.order-chat-head) { gap: 8px; padding: 12px; }
+    .successCard :global(.order-chat-list) { padding: 12px; }
+}
+
+@media (max-width: 768px) {
+    .successDetails > div { gap: 12px; }
+    .successDetails > div > :last-child { min-width: 0; max-width: 65%; text-align: right; overflow-wrap: anywhere; }
 }

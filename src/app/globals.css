@@ -8,6 +8,8 @@
   --danger: #b42318;
   --bg-secondary: #f7f7fa;
   --bg-tertiary: #ededf2;
+  --bg-card: #ffffff;
+  --bg-muted: #f1f1f6;
   --fg: #0a0a12;
   --fg-muted: #52525e;
   --fg-subtle: #8888a0;
@@ -37,6 +39,10 @@
   --danger: #ffb4b4;
   --bg-secondary: #0f0f1a;
   --bg-tertiary: #17172a;
+  --surface: #0f0f1a;
+  --surface-hover: #17172a;
+  --bg-card: #0e0e18;
+  --bg-muted: #141424;
   --fg: #f0f0ff;
   --fg-muted: #9898c0;
   --fg-subtle: #58587a;
@@ -602,7 +608,7 @@ select {
   }
 }
 
-/* ─── Spinner ─── */
+/* ─── Spinner & Loading Indicators ─── */
 .spinner {
   width: 20px;
   height: 20px;
@@ -613,6 +619,24 @@ select {
   flex-shrink: 0;
   will-change: transform;
   transform: translateZ(0);
+}
+
+.spinner-xs {
+  width: 12px;
+  height: 12px;
+  border-width: 1.5px;
+}
+
+.spinner-sm {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+
+.spinner-md {
+  width: 24px;
+  height: 24px;
+  border-width: 2.5px;
 }
 
 .spinner-lg {
@@ -628,6 +652,19 @@ select {
   to {
     transform: rotate(360deg) translateZ(0);
   }
+}
+
+/* ─── Skeleton Loading Shimmer ─── */
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-tertiary) 50%, var(--bg-secondary) 75%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.6s ease-in-out infinite;
+  border-radius: var(--radius-sm, 6px);
+}
+
+@keyframes skeletonShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 /* ─── Overlay / Modal ─── */
@@ -903,6 +940,23 @@ select {
   .divider { margin: 12px 0; }
 }
 
+@media (max-width: 640px) {
+  /* Collapse wide inline-style grids to single column on mobile */
+  [style*="grid-template-columns: repeat(auto-fit"],
+  [style*="grid-template-columns: repeat(auto-fill"],
+  [style*="grid-template-columns: minmax(300px"],
+  [style*="grid-template-columns: minmax(320px"],
+  [style*="grid-template-columns: minmax(340px"],
+  [style*="grid-template-columns: minmax(360px"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  .modal {
+    max-width: calc(100vw - 24px) !important;
+    padding: 16px !important;
+  }
+}
+
 @media (max-width: 480px) {
   body { overflow-x: hidden; }
 
@@ -922,9 +976,15 @@ select {
   [style*="grid-template-columns: repeat(2"],
   [style*="grid-template-columns: repeat(3"],
   [style*="grid-template-columns: repeat(4"],
+  [style*="grid-template-columns: repeat(auto-fit"],
+  [style*="grid-template-columns: repeat(auto-fill"],
   [style*="grid-template-columns: minmax(0, 1.2fr"],
   [style*="grid-template-columns: 1.5fr 1fr"],
-  [style*="grid-template-columns: 2fr repeat"] {
+  [style*="grid-template-columns: 2fr repeat"],
+  [style*="grid-template-columns: minmax(300px"],
+  [style*="grid-template-columns: minmax(320px"],
+  [style*="grid-template-columns: minmax(340px"],
+  [style*="grid-template-columns: minmax(360px"] {
     grid-template-columns: 1fr !important;
   }
 

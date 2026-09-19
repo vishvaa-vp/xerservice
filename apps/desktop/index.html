@@ -43,19 +43,36 @@
       </div>
       <h2 class="login-title">Vendor Station</h2>
       <p class="login-sub">Sign in with your vendor account credentials</p>
-      <div id="login-error" class="login-error" style="display:none;"></div>
+      <div id="login-error" role="alert" class="login-error" style="display:none;"></div>
       <div class="field-group">
         <label class="field-label" for="login-email">Vendor Email</label>
         <input type="email" id="login-email" class="field-input" placeholder="vendor@example.com" autocomplete="username" />
       </div>
       <div class="field-group">
         <label class="field-label" for="login-password">Password</label>
-        <input type="password" id="login-password" class="field-input" placeholder="••••••••" autocomplete="current-password" />
+        <div class="password-field">
+          <input type="password" id="login-password" class="field-input" placeholder="••••••••" autocomplete="current-password" />
+          <button type="button" id="toggle-password" aria-label="Show password" aria-controls="login-password" aria-pressed="false">Show</button>
+        </div>
       </div>
       <button id="btn-sign-in" class="btn-primary btn-full">
         <span id="sign-in-label">Sign In</span>
         <span id="sign-in-spinner" class="btn-spinner" style="display:none;"></span>
       </button>
+
+      <!-- Server Environment Selector -->
+      <div class="login-server-select" style="margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.75rem;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem;">
+          <label class="field-label" for="login-server-url" style="margin-bottom:0; font-size: 0.72rem; color: var(--fg-muted);">Server Environment</label>
+          <span id="login-server-badge" style="font-size: 0.68rem; padding: 2px 6px; border-radius: 4px; background: rgba(56, 189, 248, 0.1); color: var(--cyan);">Local / Cloud</span>
+        </div>
+        <select id="login-server-url" class="field-select" style="font-size: 0.78rem; padding: 0.4rem 0.6rem; height: auto;">
+          <option value="http://localhost:3000">Local Dev (http://localhost:3000)</option>
+          <option value="https://api.xerservice.in">Cloud Production (https://api.xerservice.in)</option>
+          <option value="custom">Custom URL…</option>
+        </select>
+        <input type="text" id="login-custom-server" class="field-input" placeholder="http://192.168.1.X:3000" style="display:none; margin-top: 0.35rem; font-size: 0.78rem; padding: 0.4rem 0.6rem;" />
+      </div>
     </div>
   </div>
 

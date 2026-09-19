@@ -1,1 +1,0 @@
-../../../../../src/app/colors/page.tsx

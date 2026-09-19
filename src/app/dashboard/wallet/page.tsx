@@ -136,7 +136,7 @@ export default function WalletPage() {
 
                         <div style={{ position: 'relative', zIndex: 1 }}>
                             <p style={{ fontSize: '13px', fontWeight: '800', opacity: 0.6, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '16px' }}>Available Balance</p>
-                            <div style={{ fontSize: '72px', fontWeight: '900', letterSpacing: '-0.06em', lineHeight: '1', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                            <div className="wallet-balance-value" style={{ fontSize: '72px', fontWeight: '900', letterSpacing: '-0.06em', lineHeight: '1', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                                 <span style={{ fontSize: '32px', fontWeight: '700', opacity: 0.5 }}>Rs</span>{balance.toFixed(2)}
                             </div>
                             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.1)', padding: '6px 16px', borderRadius: '100px', fontSize: '13px' }}>
@@ -154,7 +154,7 @@ export default function WalletPage() {
                             <h2 style={{ fontSize: '18px', fontWeight: '800', letterSpacing: '-0.02em' }}>Add XerCoins</h2>
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '20px' }}>
+                        <div className="wallet-amounts" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '20px' }}>
                             {[100, 250, 500, 1000].map(amt => (
                                 <button key={amt} disabled
                                     type="button"
@@ -175,7 +175,7 @@ export default function WalletPage() {
                             ))}
                         </div>
 
-                        <form onSubmit={e => e.preventDefault()} style={{ display: 'flex', gap: '12px' }}>
+                        <form className="wallet-topup-form" onSubmit={e => e.preventDefault()} style={{ display: 'flex', gap: '12px' }}>
                             <div style={{ flex: 1, position: 'relative' }}>
                                 <span style={{ position: 'absolute', left: '16px', top: '15px', fontWeight: '700', color: 'var(--fg-muted)' }}>Rs</span>
                                 <input className="input" type="number" placeholder="Custom amount" disabled

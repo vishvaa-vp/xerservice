@@ -1,11 +1,18 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServiceRoleClient } from "@/lib/supabase/server";
+
+import { getCorsHeaders, handleCorsPreflight } from "@/lib/cors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function OPTIONS(req: NextRequest) {
+    return handleCorsPreflight(req);
+}
+
+export async function GET(req: NextRequest) {
     const headers = {
+        ...getCorsHeaders(req),
         "Cache-Control": "no-store, max-age=0",
         "Content-Type": "application/json",
     };

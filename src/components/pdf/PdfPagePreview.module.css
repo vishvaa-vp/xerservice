@@ -17,6 +17,6 @@
 .dialog::backdrop { background: rgb(0 0 0 / 55%); }
 .dialogHeader { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
 .large { display: block; width: 100%; max-height: 70dvh; object-fit: contain; background: white; }
-.spinner { animation: pdf-spin 1s linear infinite; }
+.spinner { animation: pdf-spin 1s linear infinite; color: var(--accent); }
 @keyframes pdf-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } .page { transition: none; } }

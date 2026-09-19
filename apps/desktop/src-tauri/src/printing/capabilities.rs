@@ -41,15 +41,21 @@ pub struct PlatformPrintingCapabilitiesResponse {
     pub message: String,
 }
 
-/// Detects real capabilities for an installed printer by querying CUPS options.
+/// Detects real capabilities for an installed printer by querying OS printing options.
 /// Strictly does NOT fabricate capabilities when data is unavailable.
 pub fn detect_printer_capabilities(printer_name: &str) -> PrinterCapabilities {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         use std::process::Command;
 
+        let lpoptions_bin = if std::path::Path::new("/usr/bin/lpoptions").exists() {
+            "/usr/bin/lpoptions"
+        } else {
+            "lpoptions"
+        };
+
         // Run `lpoptions -p <printer_name> -l`
-        let output = Command::new("/usr/bin/lpoptions")
+        let output = Command::new(lpoptions_bin)
             .arg("-p")
             .arg(printer_name)
             .arg("-l")
@@ -59,6 +65,62 @@ pub fn detect_printer_capabilities(printer_name: &str) -> PrinterCapabilities {
             if out.status.success() {
                 let stdout = String::from_utf8_lossy(&out.stdout);
                 return parse_cups_ppd_options(&stdout);
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+
+        // Escape single quotes for PowerShell filter
+        let escaped_name = printer_name.replace('\'', "''");
+        let ps_cmd = format!(
+            "Get-CimInstance Win32_Printer -Filter \"Name = '{}'\" | Select-Object CapabilityDescriptions, Duplex, Color | ConvertTo-Json -Compress",
+            escaped_name
+        );
+
+        if let Ok(output) = Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &ps_cmd])
+            .output()
+        {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !stdout.is_empty() && stdout != "null" {
+                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&stdout) {
+                        let color_supported = parsed.get("Color").and_then(|v| v.as_bool());
+                        let duplex_supported = parsed.get("Duplex").and_then(|v| v.as_bool());
+
+                        let mut paper_sizes = Vec::new();
+                        if let Some(arr) = parsed.get("CapabilityDescriptions").and_then(|v| v.as_array()) {
+                            for item in arr {
+                                if let Some(s) = item.as_str() {
+                                    let lower = s.to_lowercase();
+                                    if lower.contains("a4") && !paper_sizes.contains(&"a4".to_string()) {
+                                        paper_sizes.push("a4".to_string());
+                                    } else if lower.contains("a3") && !paper_sizes.contains(&"a3".to_string()) {
+                                        paper_sizes.push("a3".to_string());
+                                    } else if lower.contains("legal") && !paper_sizes.contains(&"legal".to_string()) {
+                                        paper_sizes.push("legal".to_string());
+                                    } else if lower.contains("letter") && !paper_sizes.contains(&"letter".to_string()) {
+                                        paper_sizes.push("letter".to_string());
+                                    }
+                                }
+                            }
+                        }
+
+                        return PrinterCapabilities {
+                            supported_paper_sizes: paper_sizes,
+                            color_supported,
+                            duplex_supported,
+                            supported_orientations: Vec::new(),
+                            supported_media_types: None,
+                            max_copies: None,
+                            trays: None,
+                            max_resolution_dpi: None,
+                        };
+                    }
+                }
             }
         }
     }

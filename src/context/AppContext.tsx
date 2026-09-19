@@ -6,7 +6,7 @@ import type { Order, CustomerOrder } from '@/types/orders';
 import type { PrintDocument } from '@/lib/print-order';
 import { supabase } from '@/lib/supabase/client';
 
-export type UserType = 'customer' | 'vendor' | 'admin' | 'unverified';
+export type UserType = 'customer' | 'vendor' | 'admin' | 'support' | 'unverified';
 
 export interface User {
     id: string;
@@ -151,7 +151,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 console.warn('[AppContext] Supabase profile fetch error:', error.message);
             }
 
-            const role: UserType = !error && ['customer', 'vendor', 'admin'].includes(profile?.role) ? profile!.role : 'unverified';
+            const role: UserType = !error && ['customer', 'vendor', 'admin', 'support'].includes(profile?.role) ? profile!.role : 'unverified';
             const name = profile?.full_name || authUser?.user_metadata?.full_name || (authUser?.email ? authUser.email.split('@')[0] : '') || (authUser?.phone ? `User (${authUser.phone.slice(-4)})` : 'Customer');
             const mobile = profile?.phone || authUser?.phone || '';
             const email = (profile as any)?.email || authUser?.email || '';

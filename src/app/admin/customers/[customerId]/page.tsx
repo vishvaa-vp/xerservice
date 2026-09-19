@@ -376,7 +376,7 @@ export default function CustomerDetailPage() {
             </div>
 
             {/* Main Content Layout: Profile Details & Order History */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 360px) 1fr', gap: '24px', alignItems: 'start' }}>
+            <div className="customer-details-grid">
                 {/* Left Card: Verified Profile & Notice */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     <div className="card" style={{ padding: '20px', borderRadius: '16px', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
@@ -612,6 +612,20 @@ export default function CustomerDetailPage() {
                     )}
                 </div>
             </div>
+            <style jsx>{`
+                .customer-details-grid {
+                    display: grid;
+                    grid-template-columns: minmax(300px, 360px) 1fr;
+                    gap: 24px;
+                    align-items: start;
+                }
+                @media (max-width: 860px) {
+                    .customer-details-grid {
+                        grid-template-columns: 1fr;
+                        gap: 16px;
+                    }
+                }
+            `}</style>
         </div>
     );
 }

@@ -22,9 +22,11 @@ const viteEnv = (import.meta as ImportMeta & {
     env: { DEV: boolean; VITE_BACKEND_URL?: string };
 }).env;
 
-export const DEFAULT_BACKEND_URL = viteEnv.VITE_BACKEND_URL || (
-    viteEnv.DEV ? 'http://localhost:3000' : 'https://api.xerservice.in'
-);
+const savedBackendUrl = (typeof window !== 'undefined' && typeof localStorage !== 'undefined')
+    ? localStorage.getItem('xerservice_desktop_backend_url')
+    : null;
+
+export const DEFAULT_BACKEND_URL = savedBackendUrl || viteEnv.VITE_BACKEND_URL || 'http://localhost:3000';
 
 export interface DesktopRuntimeInfo {
     appName: string;
@@ -146,7 +148,7 @@ export async function fetchRuntimeInfo(): Promise<DesktopRuntimeInfo> {
             tauriVersion: raw.tauri_version,
             environment: raw.environment,
             platform: raw.platform,
-            backendUrl: raw.backend_url,
+            backendUrl: viteEnv.VITE_BACKEND_URL || raw.backend_url,
             printSubsystemStatus: raw.print_subsystem_status,
             isNativeRuntime: true,
         };

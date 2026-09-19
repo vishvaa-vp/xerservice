@@ -9,26 +9,38 @@ use std::collections::HashMap;
 
 /// Discovers installed printers on the host system.
 pub fn discover_installed_printers() -> Result<Vec<NormalizedPrinter>, NativePrintAdapterError> {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
-        discover_macos_printers()
+        discover_cups_printers()
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
     {
-        // Safe cross-platform fallback for future Linux/Windows implementations
+        discover_windows_printers()
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        // Safe cross-platform fallback
         Err(NativePrintAdapterError::UnsupportedPlatform(
             std::env::consts::OS.to_string(),
         ))
     }
 }
 
-#[cfg(target_os = "macos")]
-fn discover_macos_printers() -> Result<Vec<NormalizedPrinter>, NativePrintAdapterError> {
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn discover_cups_printers() -> Result<Vec<NormalizedPrinter>, NativePrintAdapterError> {
     use std::process::Command;
 
+    // Detect lpstat binary (prefer /usr/bin/lpstat, fallback to lpstat in PATH)
+    let lpstat_bin = if std::path::Path::new("/usr/bin/lpstat").exists() {
+        "/usr/bin/lpstat"
+    } else {
+        "lpstat"
+    };
+
     // 1. Get system default destination
-    let default_output = Command::new("/usr/bin/lpstat")
+    let default_output = Command::new(lpstat_bin)
         .arg("-d")
         .output()
         .map_err(|e| NativePrintAdapterError::OsCommandFailed(format!("lpstat -d failed: {}", e)))?;
@@ -38,7 +50,7 @@ fn discover_macos_printers() -> Result<Vec<NormalizedPrinter>, NativePrintAdapte
 
     // 2. Get device URIs to classify connection types
     let mut connection_map: HashMap<String, (String, Option<String>)> = HashMap::new();
-    if let Ok(device_out) = Command::new("/usr/bin/lpstat").arg("-v").output() {
+    if let Ok(device_out) = Command::new(lpstat_bin).arg("-v").output() {
         if device_out.status.success() {
             let device_stdout = String::from_utf8_lossy(&device_out.stdout);
             for line in device_stdout.lines() {
@@ -70,7 +82,7 @@ fn discover_macos_printers() -> Result<Vec<NormalizedPrinter>, NativePrintAdapte
     }
 
     // 3. Enumerate printer names and statuses
-    let p_output = Command::new("/usr/bin/lpstat")
+    let p_output = Command::new(lpstat_bin)
         .arg("-p")
         .output()
         .map_err(|e| NativePrintAdapterError::OsCommandFailed(format!("lpstat -p failed: {}", e)))?;
@@ -129,6 +141,7 @@ fn discover_macos_printers() -> Result<Vec<NormalizedPrinter>, NativePrintAdapte
 }
 
 /// Helper to extract default printer from `lpstat -d`
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn parse_default_printer(output: &str) -> Option<String> {
     // Expected: "system default destination: PrinterName"
     for line in output.lines() {
@@ -144,3 +157,92 @@ fn parse_default_printer(output: &str) -> Option<String> {
     }
     None
 }
+
+#[cfg(target_os = "windows")]
+fn discover_windows_printers() -> Result<Vec<NormalizedPrinter>, NativePrintAdapterError> {
+    use std::process::Command;
+
+    // Use PowerShell to enumerate Win32_Printer instances cleanly as JSON
+    let output = Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "Get-CimInstance Win32_Printer | Select-Object Name, DeviceID, Default, PrinterStatus, PortName | ConvertTo-Json -Compress",
+        ])
+        .output()
+        .map_err(|e| NativePrintAdapterError::OsCommandFailed(format!("powershell Get-CimInstance failed: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(NativePrintAdapterError::OsCommandFailed(format!("Windows printer query failed: {}", stderr)));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if stdout.is_empty() || stdout == "null" {
+        return Ok(Vec::new());
+    }
+
+    let parsed: serde_json::Value = serde_json::from_str(&stdout)
+        .map_err(|e| NativePrintAdapterError::ParseError(format!("Failed to parse Windows printer JSON: {}", e)))?;
+
+    let items: Vec<&serde_json::Value> = match &parsed {
+        serde_json::Value::Array(arr) => arr.iter().collect(),
+        serde_json::Value::Object(_) => vec![&parsed],
+        _ => Vec::new(),
+    };
+
+    let mut printers = Vec::new();
+
+    for item in items {
+        let name = match item.get("Name").and_then(|v| v.as_str()) {
+            Some(n) if !n.trim().is_empty() => n.trim().to_string(),
+            _ => continue,
+        };
+
+        let is_default = item.get("Default").and_then(|v| v.as_bool()).unwrap_or(false);
+
+        // Win32_Printer PrinterStatus mapping:
+        // 1=Other, 2=Unknown, 3=Idle, 4=Printing, 5=Warming Up, 6=Stopped, 7=Offline
+        let status_code = item.get("PrinterStatus").and_then(|v| v.as_u64()).unwrap_or(3);
+        let status = match status_code {
+            3 => "idle".to_string(),
+            4 | 5 => "busy".to_string(),
+            6 | 7 => "offline".to_string(),
+            _ => "idle".to_string(),
+        };
+
+        let port_name = item.get("PortName").and_then(|v| v.as_str()).unwrap_or("");
+        let port_upper = port_name.to_uppercase();
+        let connection_type = if port_upper.starts_with("USB") {
+            Some("usb".to_string())
+        } else if port_upper.starts_with("IP_") || port_upper.starts_with("TCP_") || port_upper.starts_with("WSD") {
+            Some("network".to_string())
+        } else if port_upper.starts_with("FILE") || port_upper.contains("PDF") {
+            Some("virtual".to_string())
+        } else {
+            None
+        };
+
+        let description = if !port_name.is_empty() {
+            Some(format!("Windows Spooler Port: {}", port_name))
+        } else {
+            Some("Windows Spooler Printer".to_string())
+        };
+
+        let capabilities = detect_printer_capabilities(&name);
+
+        printers.push(NormalizedPrinter {
+            printer_id: name.clone(),
+            name,
+            status,
+            is_default,
+            capabilities,
+            description,
+            connection_type,
+        });
+    }
+
+    Ok(printers)
+}
+

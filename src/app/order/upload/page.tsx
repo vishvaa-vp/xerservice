@@ -131,7 +131,7 @@ function UploadPageContent() {
     const searchParams = useSearchParams();
     const shopParam = searchParams.get("shop");
     const { currentOrder, setCurrentOrder, cart, user, isLoggedIn, isLoading, authInitialized } = useApp();
-    const [shopLoading, setShopLoading] = useState(Boolean(shopParam || currentOrder.shopId));
+    const [shopLoading, setShopLoading] = useState(Boolean(shopParam));
 
     // =========================================================================
     // DRAFT CONCURRENCY LIMITATION NOTE:
@@ -171,7 +171,7 @@ function UploadPageContent() {
     // 1. Fetch real shop data & active pricing from Supabase (Zero mock fallbacks)
     useEffect(() => {
         let isMounted = true;
-        const targetShopId = shopParam || currentOrder.shopId;
+        const targetShopId = shopParam || null;
 
         // Requirement 3: If target shop changes, clear stale draft identifiers belonging to previous shop
         if (targetShopId && previousShopIdRef.current && previousShopIdRef.current !== targetShopId) {
@@ -203,6 +203,7 @@ function UploadPageContent() {
                         setShopData(null);
                         setShopAvailability(null);
                         setShopLoading(false);
+                        setCurrentOrder(prev => (prev.shopId ? { ...prev, shopId: '', shopName: '' } : prev));
                         setError("Please select a print shop first before uploading documents.");
                     }
                     return;
@@ -316,12 +317,12 @@ function UploadPageContent() {
         }
 
         return () => { isMounted = false; };
-    }, [shopParam, currentOrder.shopId, setCurrentOrder]);
+    }, [shopParam, setCurrentOrder]);
 
     // 2. Draft order discovery / resumption with real file bytes & shop match enforcement
     useEffect(() => {
         if (!user?.id) return;
-        const targetShopId = shopData?.id || shopParam || currentOrder.shopId;
+        const targetShopId = shopData?.id || shopParam || null;
         if (!targetShopId) return;
 
         // Requirement 2: If the draft in state belongs to another shop, clear it immediately
@@ -699,7 +700,7 @@ function UploadPageContent() {
 
     const handleFiles = (newDocs: FileList | File[]) => {
         if (uploading || orderPaused) return;
-        const currentTargetShopId = shopData?.id || currentOrder.shopId || shopParam;
+        const currentTargetShopId = shopData?.id || shopParam;
         if (!currentTargetShopId) {
             setError("Please select a print shop first before uploading documents.");
             return;
@@ -725,7 +726,7 @@ function UploadPageContent() {
         setError(Array.from(new Set(messages)).join(" "));
         if (validDocs.length === 0) return;
 
-        const targetShopId = shopData?.id || shopParam || currentOrder.shopId;
+        const targetShopId = shopData?.id || shopParam;
         if (!targetShopId) {
             setError("Please select a print shop before uploading.");
             return;
@@ -956,11 +957,49 @@ function UploadPageContent() {
         <div className="page-wrapper">
             <section className="section">
                 <div className="container" style={{ maxWidth: "1000px" }}>
-                    <div className="upload-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "48px" }}>
+                    {/* Unselected Shop Alert Banner */}
+                    {!shopLoading && !activeShop && (
+                        <div className="card no-shop-banner" style={{
+                            padding: "16px 20px",
+                            borderRadius: "16px",
+                            border: "1.5px solid var(--accent)",
+                            background: "linear-gradient(135deg, rgba(84, 189, 206, 0.12), rgba(234, 88, 12, 0.08))",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            flexWrap: "wrap",
+                            gap: "12px",
+                            marginBottom: "24px",
+                            boxShadow: "0 4px 16px rgba(84, 189, 206, 0.15)",
+                        }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                <AlertTriangle size={22} color="var(--accent)" style={{ flexShrink: 0 }} />
+                                <div>
+                                    <strong style={{ fontSize: "15px", color: "var(--fg)", display: "block" }}>
+                                        Shop is not selected
+                                    </strong>
+                                    <span style={{ fontSize: "12.5px", color: "var(--fg-muted)" }}>
+                                        Please choose a print shop to unlock accurate rates and instant printing.
+                                    </span>
+                                </div>
+                            </div>
+                            <Link href="/#shops" className="btn btn-accent btn-sm" style={{ fontWeight: "800", whiteSpace: "nowrap" }}>
+                                Click here to select shop →
+                            </Link>
+                        </div>
+                    )}
+
+                    <div className="upload-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "36px" }}>
                         <div>
                             <h1 style={{ fontSize: "32px", fontWeight: "900", letterSpacing: "-0.04em", marginBottom: "8px" }}>Upload Documents</h1>
                             <p style={{ fontSize: "15px", color: "var(--fg-muted)" }}>
-                                Printing at: <strong style={{ color: "var(--accent)" }}>{activeShop?.name || currentOrder.shopName || "Selected Shop"}</strong>
+                                Printing at: {activeShop?.name || currentOrder.shopName ? (
+                                    <strong style={{ color: "var(--accent)" }}>{activeShop?.name || currentOrder.shopName}</strong>
+                                ) : (
+                                    <Link href="/#shops" style={{ color: "var(--accent)", fontWeight: "800", textDecoration: "underline" }}>
+                                        No shop selected (click here to select)
+                                    </Link>
+                                )}
                             </p>
                         </div>
                         <div className="upload-steps" style={{ display: "flex", gap: "8px", fontSize: "13px", color: "var(--fg-muted)", fontWeight: "700" }}>
@@ -1139,9 +1178,13 @@ function UploadPageContent() {
                                             {f.analysisError && <p role="alert" style={{ fontSize: "13px", marginTop: "12px", overflowWrap: "anywhere" }}>{f.analysisError}</p>}
                                             {f.status === "ready" && (
                                                 <div className="mobile-only mobile-document-detail">
-                                                    {f.settings.color === "bw" ? "B&W" : "Color"} · {f.settings.sides === "single" ? "Single-sided" : "Double-sided"} · {f.settings.paperSize.toUpperCase()}
+                                                    <span className="mobile-doc-specs">
+                                                        {f.settings.color === "bw" ? "B&W" : "Color"} · {f.settings.sides === "single" ? "Single-sided" : "Double-sided"} · {f.settings.paperSize.toUpperCase()}
+                                                    </span>
                                                     {pricingAvailable && (
-                                                        <strong>Rs {documentPrintTotals(f, { bwPerPage: bwPrice, colorPerPage: colorPrice }).amount.toFixed(2)}</strong>
+                                                        <strong className="mobile-doc-price">
+                                                            ₹{documentPrintTotals(f, { bwPerPage: bwPrice, colorPerPage: colorPrice }).amount.toFixed(2)}
+                                                        </strong>
                                                     )}
                                                 </div>
                                             )}

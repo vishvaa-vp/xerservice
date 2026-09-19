@@ -20,6 +20,7 @@ const forbiddenPaths = [
 const secretPatterns = [
     ['private key', /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/],
     ['GitHub token', /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{30,}\b/],
+    ['GitHub fine-grained token', /\bgithub_pat_[A-Za-z0-9_]{40,}\b/],
     ['AWS access key', /\bAKIA[0-9A-Z]{16}\b/],
     ['Supabase secret key', /\bsb_secret_[A-Za-z0-9_-]{20,}\b/],
     ['embedded Supabase publishable key', /\bsb_publishable_[A-Za-z0-9_-]{20,}\b/],

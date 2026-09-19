@@ -1,1 +1,0 @@
-../../../../../src/app/shops/page.tsx

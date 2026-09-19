@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/lib/supabase/client';
 import { parseShopProfileMetadata } from '@/lib/shop-profile';
-import { AlertTriangle, Clock, MessageCircle, ShieldCheck, UploadCloud, MapPin, Search, Sparkles } from 'lucide-react';
+import { AlertTriangle, Clock, UploadCloud, MapPin, Search, Sparkles, SlidersHorizontal, ArrowUpDown, Store } from 'lucide-react';
 
 export interface HomepageShop {
     id: string;
@@ -54,10 +54,10 @@ export default function HomePage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Search and filter states
+    // Search, filter, and sort states
     const [searchQuery, setSearchQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'ALL' | 'OPEN'>('ALL');
-    const [serviceFilter, setServiceFilter] = useState<'ALL' | 'COLOUR' | 'BW' | 'DUPLEX'>('ALL');
+    const [filterOption, setFilterOption] = useState<'ALL' | 'OPEN' | 'COLOUR' | 'BW' | 'DUPLEX'>('ALL');
+    const [sortBy, setSortBy] = useState<'RECOMMENDED' | 'PRICE_ASC' | 'PRICE_DESC' | 'NAME_ASC'>('RECOMMENDED');
 
     const fetchShops = useCallback(async () => {
         setLoading(true);
@@ -238,32 +238,50 @@ export default function HomePage() {
         }));
     };
 
-    // Filtered shops based on search and filter selections
+    // Filtered and sorted shops based on search, filter, and sort selections
     const filteredShops = useMemo(() => {
-        return shops.filter(shop => {
+        const result = shops.filter(shop => {
             if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase().trim();
                 const matchesName = shop.name.toLowerCase().includes(q);
                 const matchesDesc = (shop.description || '').toLowerCase().includes(q);
                 if (!matchesName && !matchesDesc) return false;
             }
-            if (statusFilter === 'OPEN' && shop.status !== 'OPEN') {
+            if (filterOption === 'OPEN' && shop.status !== 'OPEN') {
                 return false;
             }
-            if (serviceFilter === 'COLOUR' && !shop.supportedServices.includes('Colour')) {
+            if (filterOption === 'COLOUR' && !shop.supportedServices.includes('Colour')) {
                 return false;
             }
-            if (serviceFilter === 'BW' && !shop.supportedServices.includes('B&W')) {
+            if (filterOption === 'BW' && !shop.supportedServices.includes('B&W')) {
                 return false;
             }
-            if (serviceFilter === 'DUPLEX' && !shop.supportedServices.includes('Duplex')) {
+            if (filterOption === 'DUPLEX' && !shop.supportedServices.includes('Duplex')) {
                 return false;
             }
             return true;
         });
-    }, [shops, searchQuery, statusFilter, serviceFilter]);
 
-    const isSingleShop = filteredShops.length === 1;
+        return result.sort((a, b) => {
+            if (sortBy === 'PRICE_ASC') {
+                const priceA = a.startingPrice ?? 999999;
+                const priceB = b.startingPrice ?? 999999;
+                return priceA - priceB;
+            }
+            if (sortBy === 'PRICE_DESC') {
+                const priceA = a.startingPrice ?? -1;
+                const priceB = b.startingPrice ?? -1;
+                return priceB - priceA;
+            }
+            if (sortBy === 'NAME_ASC') {
+                return a.name.localeCompare(b.name);
+            }
+            // RECOMMENDED: Open shops first, then alphabetical
+            if (a.status === 'OPEN' && b.status !== 'OPEN') return -1;
+            if (a.status !== 'OPEN' && b.status === 'OPEN') return 1;
+            return a.name.localeCompare(b.name);
+        });
+    }, [shops, searchQuery, filterOption, sortBy]);
 
     return (
         <div className="page-wrapper customer-homepage">
@@ -280,7 +298,7 @@ export default function HomePage() {
                         )}
                         <h2>What would you like to print?</h2>
                         <div className="mobile-home-actions">
-                            <Link className="btn btn-accent" href="#shops">
+                            <Link className="btn btn-accent" href="/order/upload">
                                 <UploadCloud size={20} />Print Document
                             </Link>
                             <Link className="btn btn-outline" href={user ? '/dashboard/orders' : '/login?redirect=/dashboard/orders'}>
@@ -289,33 +307,7 @@ export default function HomePage() {
                         </div>
                     </div>
 
-                    {/* Concise Hero Section (Replacing 2 large introductory boxes per Section 12.1) */}
-                    <div className="home-hero-section">
-                        <div className="hero-content">
-                            <div className="hero-badge">
-                                <ShieldCheck size={14} className="hero-badge-icon" />
-                                <span>Verified Print Network</span>
-                            </div>
-                            <h1 className="hero-heading">Instant Printing at Local Print Shops</h1>
-                            <p className="hero-subheading">
-                                Upload your documents, configure print settings, and collect your finished prints nearby without waiting in line.
-                            </p>
-                            <div className="hero-actions">
-                                <a href="#shops" className="btn btn-accent btn-lg hero-cta">
-                                    <UploadCloud size={18} />
-                                    <span>Explore Print Shops</span>
-                                </a>
-                                <Link
-                                    href={user ? '/dashboard/orders' : '/login?redirect=/dashboard/orders'}
-                                    className="btn btn-outline btn-lg"
-                                >
-                                    <span>My Orders</span>
-                                </Link>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Shop Search & Filter Controls */}
+                    {/* Shop Search, Filter & Sort Controls */}
                     <div id="shops" className="shops-section-header">
                         <div className="shops-title-area">
                             <h2 className="shops-title">Print Shops</h2>
@@ -347,42 +339,41 @@ export default function HomePage() {
                                 )}
                             </div>
 
-                            <div className="shops-filter-pills" role="toolbar" aria-label="Shop filters">
-                                <button
-                                    type="button"
-                                    className={`filter-pill ${statusFilter === 'ALL' && serviceFilter === 'ALL' ? 'active' : ''}`}
-                                    onClick={() => { setStatusFilter('ALL'); setServiceFilter('ALL'); }}
-                                >
-                                    All
-                                </button>
-                                <button
-                                    type="button"
-                                    className={`filter-pill ${statusFilter === 'OPEN' ? 'active' : ''}`}
-                                    onClick={() => setStatusFilter(prev => prev === 'OPEN' ? 'ALL' : 'OPEN')}
-                                >
-                                    Open Now
-                                </button>
-                                <button
-                                    type="button"
-                                    className={`filter-pill ${serviceFilter === 'COLOUR' ? 'active' : ''}`}
-                                    onClick={() => setServiceFilter(prev => prev === 'COLOUR' ? 'ALL' : 'COLOUR')}
-                                >
-                                    Colour
-                                </button>
-                                <button
-                                    type="button"
-                                    className={`filter-pill ${serviceFilter === 'BW' ? 'active' : ''}`}
-                                    onClick={() => setServiceFilter(prev => prev === 'BW' ? 'ALL' : 'BW')}
-                                >
-                                    B&W
-                                </button>
-                                <button
-                                    type="button"
-                                    className={`filter-pill ${serviceFilter === 'DUPLEX' ? 'active' : ''}`}
-                                    onClick={() => setServiceFilter(prev => prev === 'DUPLEX' ? 'ALL' : 'DUPLEX')}
-                                >
-                                    Duplex
-                                </button>
+                            <div className="shops-filter-sort-controls">
+                                <div className="control-select-box">
+                                    <SlidersHorizontal size={14} className="control-select-icon" />
+                                    <label htmlFor="shop-filter-select" className="control-select-label">Filter:</label>
+                                    <select
+                                        id="shop-filter-select"
+                                        className="shops-select-input"
+                                        value={filterOption}
+                                        onChange={e => setFilterOption(e.target.value as any)}
+                                        aria-label="Filter shops"
+                                    >
+                                        <option value="ALL">All</option>
+                                        <option value="OPEN">Open Now</option>
+                                        <option value="COLOUR">Colour</option>
+                                        <option value="BW">B&W</option>
+                                        <option value="DUPLEX">Duplex</option>
+                                    </select>
+                                </div>
+
+                                <div className="control-select-box">
+                                    <ArrowUpDown size={14} className="control-select-icon" />
+                                    <label htmlFor="shop-sort-select" className="control-select-label">Sort by:</label>
+                                    <select
+                                        id="shop-sort-select"
+                                        className="shops-select-input"
+                                        value={sortBy}
+                                        onChange={e => setSortBy(e.target.value as any)}
+                                        aria-label="Sort shops"
+                                    >
+                                        <option value="RECOMMENDED">Recommended</option>
+                                        <option value="PRICE_ASC">Price: Low to High</option>
+                                        <option value="PRICE_DESC">Price: High to Low</option>
+                                        <option value="NAME_ASC">Name (A-Z)</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -422,46 +413,10 @@ export default function HomePage() {
                             <button
                                 type="button"
                                 className="btn btn-outline btn-sm"
-                                onClick={() => { setSearchQuery(''); setStatusFilter('ALL'); setServiceFilter('ALL'); }}
+                                onClick={() => { setSearchQuery(''); setFilterOption('ALL'); setSortBy('RECOMMENDED'); }}
                             >
                                 Reset Filters
                             </button>
-                        </div>
-                    ) : isSingleShop ? (
-                        /* Single Shop Scenario (Section 12.1): Well-sized card paired with 3-step guidance */
-                        <div className="single-shop-layout">
-                            <div className="single-shop-card-wrapper">
-                                <ShopCard shop={filteredShops[0]} onSelect={selectShop} />
-                            </div>
-                            <div className="how-it-works-panel card">
-                                <div className="how-header">
-                                    <Sparkles size={18} color="var(--accent)" />
-                                    <h3 style={{ fontSize: '16px', fontWeight: '800', margin: 0 }}>How XerService Works</h3>
-                                </div>
-                                <div className="how-steps">
-                                    <div className="how-step">
-                                        <div className="step-num">1</div>
-                                        <div className="step-desc">
-                                            <h4>Upload Document</h4>
-                                            <p>Upload PDF or image files securely from your phone or laptop.</p>
-                                        </div>
-                                    </div>
-                                    <div className="how-step">
-                                        <div className="step-num">2</div>
-                                        <div className="step-desc">
-                                            <h4>Configure Settings</h4>
-                                            <p>Choose B&W or colour, single or double-sided, copies, and orientation.</p>
-                                        </div>
-                                    </div>
-                                    <div className="how-step">
-                                        <div className="step-num">3</div>
-                                        <div className="step-desc">
-                                            <h4>Collect In Minutes</h4>
-                                            <p>Pay online and pick up your ready-to-go prints at the shop counter.</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
                         </div>
                     ) : (
                         /* Standard Responsive Grid (3 col desktop, 2 col tablet, 1 col mobile) */
@@ -471,73 +426,10 @@ export default function HomePage() {
                             ))}
                         </div>
                     )}
-
-                    {/* Compact Secondary WhatsApp Indicator (Section 12.1) */}
-                    <div className="compact-whatsapp-indicator">
-                        <div className="whatsapp-indicator-header">
-                            <MessageCircle size={18} color="#16a34a" />
-                            <span style={{ fontWeight: '700', fontSize: '13px' }}>WhatsApp Print Assistant</span>
-                            <span className="badge" style={{ fontSize: '10px', marginLeft: 'auto', background: 'rgba(22, 163, 74, 0.1)', color: '#16a34a', border: '1px solid rgba(22, 163, 74, 0.25)' }}>
-                                Coming soon
-                            </span>
-                        </div>
-                        <p style={{ margin: 0, fontSize: '12px', color: 'var(--fg-muted)', lineHeight: '1.5' }}>
-                            WhatsApp document import is currently being prepared. Upload your files directly through the website for immediate printing.
-                        </p>
-                    </div>
                 </div>
             </section>
 
             <style>{`
-                /* Hero Section */
-                .home-hero-section {
-                    background: var(--bg);
-                    border: 1px solid var(--border);
-                    border-radius: 14px;
-                    padding: 36px 28px;
-                    margin-bottom: 24px;
-                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
-                }
-                .hero-content {
-                    max-width: 680px;
-                }
-                .hero-badge {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 6px;
-                    font-size: 11px;
-                    font-weight: 700;
-                    color: var(--accent);
-                    background: var(--accent-subtle, rgba(234, 88, 12, 0.08));
-                    border: 1px solid var(--accent-border, rgba(234, 88, 12, 0.2));
-                    padding: 4px 10px;
-                    border-radius: 999px;
-                    margin-bottom: 12px;
-                }
-                .hero-heading {
-                    font-size: 28px;
-                    font-weight: 900;
-                    letter-spacing: -0.02em;
-                    line-height: 1.25;
-                    margin-bottom: 10px;
-                    color: var(--fg);
-                }
-                .hero-subheading {
-                    font-size: 15px;
-                    color: var(--fg-muted);
-                    line-height: 1.6;
-                    margin-bottom: 22px;
-                }
-                .hero-actions {
-                    display: flex;
-                    align-items: center;
-                    gap: 12px;
-                    flex-wrap: wrap;
-                }
-                .hero-cta {
-                    text-decoration: none;
-                }
-
                 /* Shops Header & Filters */
                 .shops-section-header {
                     display: flex;
@@ -571,8 +463,8 @@ export default function HomePage() {
                 }
                 .shops-search-wrapper {
                     position: relative;
-                    flex: 1;
-                    min-width: 240px;
+                    flex: 1 1 240px;
+                    min-width: 200px;
                 }
                 .search-icon {
                     position: absolute;
@@ -609,32 +501,70 @@ export default function HomePage() {
                     cursor: pointer;
                     padding: 0 4px;
                 }
-                .shops-filter-pills {
+                .shops-filter-sort-controls {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    flex-wrap: wrap;
+                }
+                .control-select-box {
                     display: flex;
                     align-items: center;
                     gap: 6px;
-                    flex-wrap: wrap;
-                }
-                .filter-pill {
-                    height: 34px;
-                    padding: 0 14px;
-                    border-radius: 999px;
-                    border: 1px solid var(--border);
                     background: var(--bg);
+                    border: 1px solid var(--border);
+                    border-radius: 999px;
+                    padding: 0 12px;
+                    height: 38px;
+                    transition: border-color 0.15s ease;
+                }
+                .control-select-box:focus-within {
+                    border-color: var(--accent);
+                }
+                .control-select-icon {
                     color: var(--fg-muted);
+                    flex-shrink: 0;
+                }
+                .control-select-label {
                     font-size: 12px;
                     font-weight: 700;
-                    cursor: pointer;
-                    transition: all 0.15s ease;
+                    color: var(--fg-muted);
+                    white-space: nowrap;
+                    margin: 0;
                 }
-                .filter-pill:hover {
-                    border-color: var(--fg-muted);
+                .shops-select-input {
+                    border: none;
+                    background: transparent;
                     color: var(--fg);
+                    font-size: 13px;
+                    font-weight: 700;
+                    outline: none;
+                    cursor: pointer;
+                    padding: 0 2px;
                 }
-                .filter-pill.active {
-                    background: var(--fg);
-                    color: var(--bg);
-                    border-color: var(--fg);
+                @media (max-width: 640px) {
+                    .shops-controls {
+                        gap: 10px;
+                    }
+                    .shops-search-wrapper {
+                        flex: 1 1 100%;
+                        width: 100%;
+                    }
+                    .shops-filter-sort-controls {
+                        width: 100%;
+                        display: grid;
+                        grid-template-columns: 1fr 1fr;
+                        gap: 8px;
+                    }
+                    .control-select-box {
+                        width: 100%;
+                        justify-content: flex-start;
+                        padding: 0 10px;
+                    }
+                    .shops-select-input {
+                        width: 100%;
+                        font-size: 12px;
+                    }
                 }
 
                 /* Responsive Grid (Section 12.1: 3 col desktop, 2 col tablet, 1 col mobile) */
@@ -643,6 +573,7 @@ export default function HomePage() {
                     grid-template-columns: repeat(3, minmax(0, 1fr));
                     gap: 18px;
                     margin-bottom: 24px;
+                    width: 100%;
                 }
                 @media (max-width: 980px) {
                     .shops-grid {
@@ -652,9 +583,15 @@ export default function HomePage() {
                 }
                 @media (max-width: 640px) {
                     .shops-grid {
-                        grid-template-columns: 1fr;
+                        grid-template-columns: minmax(0, 1fr);
                         gap: 14px;
                     }
+                }
+                .shops-grid > a {
+                    min-width: 0;
+                    width: 100%;
+                    text-decoration: none;
+                    display: block;
                 }
 
                 /* Single Shop Presentation Layout */
@@ -728,7 +665,9 @@ export default function HomePage() {
                     display: flex;
                     flex-direction: column;
                     height: 100%;
-                    border-radius: 12px;
+                    min-width: 0;
+                    width: 100%;
+                    border-radius: 14px;
                     overflow: hidden;
                     background: var(--bg);
                     border: 1px solid var(--border);
@@ -772,11 +711,16 @@ export default function HomePage() {
                     flex: 1;
                     padding: 16px;
                     gap: 10px;
+                    min-width: 0;
+                    width: 100%;
+                    box-sizing: border-box;
                 }
                 .shop-title-area {
                     display: flex;
                     flex-direction: column;
                     gap: 4px;
+                    min-width: 0;
+                    width: 100%;
                 }
                 .shop-name {
                     font-size: 16px;
@@ -785,6 +729,10 @@ export default function HomePage() {
                     margin: 0;
                     color: var(--fg);
                     line-height: 1.3;
+                    min-width: 0;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
                 }
                 .shop-location, .shop-hours {
                     display: flex;
@@ -793,9 +741,19 @@ export default function HomePage() {
                     font-size: 12px;
                     color: var(--fg-muted);
                     font-weight: 600;
+                    min-width: 0;
+                    width: 100%;
                 }
                 .shop-location {
                     line-height: 1.4;
+                    overflow: hidden;
+                }
+                .shop-location > span {
+                    min-width: 0;
+                    flex: 1;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
                 }
                 .closing-notice {
                     font-size: 11px;
@@ -865,22 +823,6 @@ export default function HomePage() {
                     padding: 8px 14px;
                 }
 
-                /* Compact Secondary WhatsApp Indicator */
-                .compact-whatsapp-indicator {
-                    border: 1px solid rgba(22, 163, 74, 0.25);
-                    background: var(--bg);
-                    border-radius: 10px;
-                    padding: 14px 18px;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 6px;
-                    margin-top: 14px;
-                }
-                .whatsapp-indicator-header {
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                }
 
                 /* Skeletons */
                 .shop-skeleton-card {
@@ -892,7 +834,9 @@ export default function HomePage() {
                 }
                 .skeleton-media {
                     height: 140px;
-                    background: var(--bg-secondary);
+                    background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-tertiary) 50%, var(--bg-secondary) 75%);
+                    background-size: 200% 100%;
+                    animation: skeletonShimmer 1.6s ease-in-out infinite;
                 }
                 .skeleton-body {
                     padding: 16px;
@@ -901,7 +845,9 @@ export default function HomePage() {
                     gap: 10px;
                 }
                 .skeleton-line {
-                    background: var(--bg-secondary);
+                    background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-tertiary) 50%, var(--bg-secondary) 75%);
+                    background-size: 200% 100%;
+                    animation: skeletonShimmer 1.6s ease-in-out infinite;
                     border-radius: 4px;
                 }
 
@@ -923,6 +869,7 @@ export default function HomePage() {
 
 function ShopCard({ shop, onSelect }: { shop: HomepageShop; onSelect: (shop: HomepageShop) => void }) {
     const { user } = useApp();
+    const [imgFailed, setImgFailed] = useState(false);
     const isClosed = shop.status === 'CLOSED';
     const isPaused = shop.status === 'PAUSED';
     const isClosingSoon = shop.status === 'OPEN' && shop.closingSoon;
@@ -939,10 +886,47 @@ function ShopCard({ shop, onSelect }: { shop: HomepageShop; onSelect: (shop: Hom
         >
             {/* Media on top (Aspect 16:9 banner) */}
             <div className="shop-card-media">
-                {shop.imageUrl ? (
-                    <img src={shop.imageUrl} alt={shop.name} className="shop-media-img" />
+                {shop.imageUrl && !imgFailed ? (
+                    <img
+                        src={shop.imageUrl}
+                        alt={shop.name}
+                        className="shop-media-img"
+                        onError={() => setImgFailed(true)}
+                    />
                 ) : (
-                    <span className="shop-initials-fallback">{shop.imageInitials}</span>
+                    <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        width: '100%',
+                        height: '100%',
+                        background: 'linear-gradient(135deg, rgba(84, 189, 206, 0.12) 0%, rgba(13, 148, 136, 0.18) 100%)',
+                    }}>
+                        <div style={{
+                            width: '46px',
+                            height: '46px',
+                            borderRadius: '50%',
+                            background: 'rgba(84, 189, 206, 0.2)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            border: '1.5px solid rgba(84, 189, 206, 0.35)',
+                            color: 'var(--accent)',
+                        }}>
+                            <Store size={24} />
+                        </div>
+                        <span style={{
+                            fontSize: '13px',
+                            fontWeight: '800',
+                            letterSpacing: '0.06em',
+                            color: 'var(--accent)',
+                            textTransform: 'uppercase',
+                        }}>
+                            {shop.imageInitials || shop.name.slice(0, 2).toUpperCase()}
+                        </span>
+                    </div>
                 )}
                 <div className="shop-status-overlay">
                     {isClosed ? (

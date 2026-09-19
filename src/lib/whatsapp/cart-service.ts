@@ -179,13 +179,46 @@ export async function listCustomerWhatsAppUploads(userId: string) {
     if (!userId) return [];
     const sb = getServiceRoleClient();
 
-    const { data, error } = await sb
+    // Check if user has a verified phone or active whatsapp_links
+    const phoneNumbers: string[] = [];
+    try {
+        const { data: profile } = await sb
+            .from('profiles')
+            .select('phone')
+            .eq('user_id', userId)
+            .maybeSingle();
+        if (profile?.phone) phoneNumbers.push(profile.phone);
+
+        const { data: links } = await sb
+            .from('whatsapp_links')
+            .select('phone_number, sender_id')
+            .eq('user_id', userId)
+            .eq('status', 'active');
+        if (links && links.length > 0) {
+            for (const l of links) {
+                if (l.phone_number && !phoneNumbers.includes(l.phone_number)) phoneNumbers.push(l.phone_number);
+                if (l.sender_id && !phoneNumbers.includes(l.sender_id)) phoneNumbers.push(l.sender_id);
+            }
+        }
+    } catch {
+        // Fallback to userId isolation
+    }
+
+    let query = sb
         .from('whatsapp_uploads')
         .select('*')
-        .eq('user_id', userId)
         .in('status', ['downloaded', 'cart_ready'])
         .not('storage_path', 'is', null)
         .order('created_at', { ascending: false });
+
+    if (phoneNumbers.length > 0) {
+        const phoneOrConditions = phoneNumbers.map(p => `whatsapp_number.eq.${p}`).join(',');
+        query = query.or(`user_id.eq.${userId},${phoneOrConditions}`);
+    } else {
+        query = query.eq('user_id', userId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
         console.error('[listCustomerWhatsAppUploads] Error:', error);

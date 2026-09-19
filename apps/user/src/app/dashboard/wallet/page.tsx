@@ -1,1 +1,0 @@
-../../../../../../src/app/dashboard/wallet/page.tsx

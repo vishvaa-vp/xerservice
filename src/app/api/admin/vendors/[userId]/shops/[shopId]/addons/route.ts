@@ -97,10 +97,33 @@ export async function POST(
 
     try {
         const body = await req.json();
-        const { addonId, price, isAvailable = true } = body;
+        const { addonId, name, description, imageUrl, image_url, estimatedMinutes, minPages, maxPages, price, isAvailable = true } = body;
 
-        if (!addonId) {
-            return NextResponse.json({ error: 'addonId is required.' }, { status: 400 });
+        let targetAddonId = addonId;
+
+        // If no addonId is given, but name is provided, create a new add-on directly
+        if (!targetAddonId && name && String(name).trim()) {
+            const finalImageUrl = imageUrl || image_url || null;
+            const { data: newAddon, error: createErr } = await sb
+                .from('addons')
+                .insert({
+                    name: String(name).trim(),
+                    description: description ? String(description).trim() : null,
+                    image_url: finalImageUrl ? String(finalImageUrl).trim() : null,
+                    estimated_minutes: Math.max(0, parseInt(estimatedMinutes) || 0),
+                    min_pages: Math.max(1, parseInt(minPages) || 1),
+                    max_pages: Math.max(1, parseInt(maxPages) || 100),
+                    is_active: true,
+                })
+                .select('id, name')
+                .single();
+
+            if (createErr) throw new Error(createErr.message);
+            targetAddonId = newAddon.id;
+        }
+
+        if (!targetAddonId) {
+            return NextResponse.json({ error: 'Service name or addonId is required.' }, { status: 400 });
         }
 
         const numPrice = Number(price);
@@ -113,11 +136,11 @@ export async function POST(
         const { data: catalogueItem, error: catErr } = await sb
             .from('addons')
             .select('id, name')
-            .eq('id', addonId)
+            .eq('id', targetAddonId)
             .single();
 
         if (catErr || !catalogueItem) {
-            return NextResponse.json({ error: 'Catalogue add-on not found.' }, { status: 404 });
+            return NextResponse.json({ error: 'Add-on service not found.' }, { status: 404 });
         }
 
         // Check if already assigned
@@ -125,11 +148,11 @@ export async function POST(
             .from('shop_addons')
             .select('id')
             .eq('shop_id', shopId)
-            .eq('addon_id', addonId)
+            .eq('addon_id', targetAddonId)
             .maybeSingle();
 
         if (existingAssignment) {
-            return NextResponse.json({ error: 'This add-on is already assigned to this shop.' }, { status: 409 });
+            return NextResponse.json({ error: 'This add-on service is already assigned to this shop.' }, { status: 409 });
         }
 
         // Insert new assignment
@@ -137,7 +160,7 @@ export async function POST(
             .from('shop_addons')
             .insert({
                 shop_id: shopId,
-                addon_id: addonId,
+                addon_id: targetAddonId,
                 price: roundedPrice,
                 is_available: Boolean(isAvailable),
             })

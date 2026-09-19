@@ -4,14 +4,15 @@ import { getServiceRoleClient } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
 
-const VALID_PAPER_SIZES = ['A4', 'A3', 'LEGAL'] as const;
+const VALID_PAPER_SIZES = ['A4'] as const;
 const VALID_PRINT_MODES = ['BW', 'COLOUR'] as const;
-const VALID_SIDES = ['SINGLE', 'DOUBLE_LONG_EDGE', 'DOUBLE_SHORT_EDGE'] as const;
+const DISPLAY_SIDES = ['SINGLE', 'DOUBLE'] as const;
+const DB_SIDES = ['SINGLE', 'DOUBLE_LONG_EDGE', 'DOUBLE_SHORT_EDGE', 'DOUBLE'] as const;
 
 export interface MatrixRow {
     paper_size: typeof VALID_PAPER_SIZES[number];
     print_mode: typeof VALID_PRINT_MODES[number];
-    sides: typeof VALID_SIDES[number];
+    sides: typeof DISPLAY_SIDES[number];
     price_per_sheet: number;
     active: boolean;
     configured: boolean;
@@ -19,7 +20,7 @@ export interface MatrixRow {
 
 /**
  * GET /api/admin/vendors/[userId]/shops/[shopId]/pricing
- * Returns complete rate matrix (18 combinations) for the shop.
+ * Returns clean rate matrix (4 A4 combinations: BW & Colour for Single and Double-sided) for the shop.
  */
 export async function GET(
     req: NextRequest,
@@ -57,9 +58,13 @@ export async function GET(
         const matrix: MatrixRow[] = [];
         for (const paper of VALID_PAPER_SIZES) {
             for (const mode of VALID_PRINT_MODES) {
-                for (const side of VALID_SIDES) {
-                    const key = `${paper}:${mode}:${side}`;
-                    const found = dbMap.get(key);
+                for (const side of DISPLAY_SIDES) {
+                    let found = dbMap.get(`${paper}:${mode}:${side}`);
+                    if (!found && side === 'DOUBLE') {
+                        // Check DOUBLE_LONG_EDGE or DOUBLE_SHORT_EDGE from DB
+                        found = dbMap.get(`${paper}:${mode}:DOUBLE_LONG_EDGE`) || dbMap.get(`${paper}:${mode}:DOUBLE_SHORT_EDGE`);
+                    }
+
                     matrix.push({
                         paper_size: paper,
                         print_mode: mode,
@@ -143,9 +148,9 @@ export async function PUT(
                 }, { status: 400 });
             }
 
-            if (!VALID_SIDES.includes(side as any)) {
+            if (!DB_SIDES.includes(side as any)) {
                 return NextResponse.json({
-                    error: `Invalid sides "${item.sides}" at index ${idx}. Must be one of: ${VALID_SIDES.join(', ')}`
+                    error: `Invalid sides "${item.sides}" at index ${idx}. Must be SINGLE or DOUBLE.`
                 }, { status: 400 });
             }
 
@@ -158,16 +163,39 @@ export async function PUT(
 
             const roundedPrice = Math.round(rawPrice * 100) / 100;
             const active = typeof item.active === 'boolean' ? item.active : true;
+            const now = new Date().toISOString();
 
-            rowsToUpsert.push({
-                shop_id: shopId,
-                paper_size: paper,
-                print_mode: mode,
-                sides: side,
-                price_per_sheet: roundedPrice,
-                active,
-                updated_at: new Date().toISOString(),
-            });
+            if (side === 'DOUBLE') {
+                // Expand DOUBLE into both DB constraint compliant rows
+                rowsToUpsert.push({
+                    shop_id: shopId,
+                    paper_size: paper,
+                    print_mode: mode,
+                    sides: 'DOUBLE_LONG_EDGE',
+                    price_per_sheet: roundedPrice,
+                    active,
+                    updated_at: now,
+                });
+                rowsToUpsert.push({
+                    shop_id: shopId,
+                    paper_size: paper,
+                    print_mode: mode,
+                    sides: 'DOUBLE_SHORT_EDGE',
+                    price_per_sheet: roundedPrice,
+                    active,
+                    updated_at: now,
+                });
+            } else {
+                rowsToUpsert.push({
+                    shop_id: shopId,
+                    paper_size: paper,
+                    print_mode: mode,
+                    sides: side,
+                    price_per_sheet: roundedPrice,
+                    active,
+                    updated_at: now,
+                });
+            }
         }
 
         // Upsert rows into shop_pricing with conflict on unique constraint

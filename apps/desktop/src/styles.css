@@ -2427,3 +2427,8 @@ body {
     border-color: #eee !important;
   }
 }
+
+.password-field { position: relative; }
+.password-field .field-input { padding-right: 68px; }
+.password-field button { position: absolute; right: 4px; top: 0; bottom: 0; min-width: 56px; min-height: 44px; border: 0; border-radius: 8px; background: transparent; color: var(--fg); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.password-field button:focus-visible { outline: 2px solid var(--cyan); outline-offset: -3px; }

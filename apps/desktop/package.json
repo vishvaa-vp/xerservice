@@ -8,6 +8,8 @@
     "prebuild": "node scripts/prepare-pdfjs-desktop.cjs",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "bundle": "tauri build --no-bundle",
+    "bundle:dmg": "tauri build",
     "preview": "vite preview",
     "tauri": "tauri"
   },

@@ -369,15 +369,21 @@ pub fn submit_native_print_job(req: PrintJobSubmissionRequest) -> Result<NativeP
         });
     };
 
-    // 7. Execute real OS print submission via safe CUPS Command execution
-    #[cfg(target_os = "macos")]
+    // 7. Execute real OS print submission
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
+        let lp_bin = if std::path::Path::new("/usr/bin/lp").exists() {
+            "/usr/bin/lp"
+        } else {
+            "lp"
+        };
+
         println!(
             "[RUST_IPC_HANDLER] STAGE_E_CUPS_SUBMISSION: Submitting print job to CUPS destination '{}' (order_id={:?})",
             target_printer.name, req.order_id
         );
 
-        let mut cmd = Command::new("/usr/bin/lp");
+        let mut cmd = Command::new(lp_bin);
         cmd.arg("-d").arg(&target_printer.name);
         cmd.arg("-c"); // Force copy to CUPS spooler before temp file cleanup
 
@@ -443,9 +449,9 @@ pub fn submit_native_print_job(req: PrintJobSubmissionRequest) -> Result<NativeP
         let _ = super::persistence::upsert_record(intent_record, None);
 
         let output = cmd.output().map_err(|e| {
-            println!("[RUST_IPC_HANDLER] STAGE_E_SUBMISSION_FAILED: Failed to execute /usr/bin/lp: {}", e);
+            println!("[RUST_IPC_HANDLER] STAGE_E_SUBMISSION_FAILED: Failed to execute {}: {}", lp_bin, e);
             let _ = fs::remove_file(&file_to_print);
-            format!("Failed to execute /usr/bin/lp: {}", e)
+            format!("Failed to execute {}: {}", lp_bin, e)
         })?;
 
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -508,8 +514,8 @@ pub fn submit_native_print_job(req: PrintJobSubmissionRequest) -> Result<NativeP
             })
         } else {
             println!(
-                "[RUST_IPC_HANDLER] STAGE_E_SUBMISSION_FAILED: CUPS /usr/bin/lp error: stdout='{}' stderr='{}'",
-                stdout, stderr
+                "[RUST_IPC_HANDLER] STAGE_E_SUBMISSION_FAILED: CUPS {} error: stdout='{}' stderr='{}'",
+                lp_bin, stdout, stderr
             );
 
             // Persist failed submission state (Step 16 & 17)
@@ -548,9 +554,183 @@ pub fn submit_native_print_job(req: PrintJobSubmissionRequest) -> Result<NativeP
         }
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
     {
-        let _ = fs::remove_file(&test_doc_path);
+        let job_title = if let Some(ref oid) = req.order_id {
+            format!("XerService Order [{}] Job [{}]", oid, job_id)
+        } else {
+            format!("XerService Native Print Test Step 12 [{}]", job_id)
+        };
+
+        println!(
+            "[RUST_IPC_HANDLER] STAGE_E_WIN_SUBMISSION: Submitting print job to Windows printer '{}' (order_id={:?})",
+            target_printer.name, req.order_id
+        );
+
+        // Persist print intent BEFORE executing submission
+        let intent_record = super::persistence::PrintJobRecord {
+            local_job_id: job_id.clone(),
+            xer_service_order_id: req.order_id.clone(),
+            native_job_id: None,
+            printer_id: target_printer.name.clone(),
+            status: "SUBMITTING".to_string(),
+            title: Some(job_title.clone()),
+            submitted_at: now.clone(),
+            updated_at: now.clone(),
+            managed_by_xer_service: true,
+            submission_state: "PENDING_SUBMISSION".to_string(),
+            recovery_state: "NOT_APPLICABLE".to_string(),
+            last_known_native_status: None,
+            retry_count: 0,
+            cancellation_requested: false,
+            completed_at: None,
+            failed_at: None,
+            error_code: None,
+            error_message: None,
+        };
+        let _ = super::persistence::upsert_record(intent_record, None);
+
+        let is_text = file_to_print.extension().and_then(|e| e.to_str()).map(|e| e.eq_ignore_ascii_case("txt")).unwrap_or(false);
+        let escaped_printer = target_printer.name.replace('\'', "''");
+        let file_path_str = file_to_print.to_string_lossy().replace('\'', "''");
+
+        let ps_cmd = if is_text || req.is_test_job == Some(true) {
+            format!(
+                "Get-Content -LiteralPath '{}' -Raw | Out-Printer -Name '{}'",
+                file_path_str, escaped_printer
+            )
+        } else {
+            format!(
+                "Start-Process -FilePath '{}' -Verb PrintTo -ArgumentList '\"{}\"' -PassThru -Wait",
+                file_path_str, escaped_printer
+            )
+        };
+
+        let output = Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &ps_cmd])
+            .output();
+
+        // Clean up temporary print file after submission
+        let _ = fs::remove_file(&file_to_print);
+
+        match output {
+            Ok(out) if out.status.success() => {
+                let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+
+                // Query Windows Print Spooler to detect the newest job ID for this printer
+                let id_query = format!(
+                    "Get-PrintJob -PrinterName '{}' | Sort-Object SubmittedTime -Descending | Select-Object -First 1 -ExpandProperty Id",
+                    escaped_printer
+                );
+                let native_job_id = Command::new("powershell")
+                    .args(["-NoProfile", "-NonInteractive", "-Command", &id_query])
+                    .output()
+                    .ok()
+                    .and_then(|id_out| {
+                        let s = String::from_utf8_lossy(&id_out.stdout).trim().to_string();
+                        if !s.is_empty() && s.chars().all(|c| c.is_ascii_digit()) {
+                            Some(s)
+                        } else {
+                            None
+                        }
+                    })
+                    .or_else(|| Some(format!("WIN-{}", job_id)));
+
+                super::status::register_submitted_job(
+                    &job_id,
+                    native_job_id.as_deref(),
+                    &target_printer.name,
+                    &now,
+                );
+
+                let updated_record = super::persistence::PrintJobRecord {
+                    local_job_id: job_id.clone(),
+                    xer_service_order_id: req.order_id.clone(),
+                    native_job_id: native_job_id.clone(),
+                    printer_id: target_printer.name.clone(),
+                    status: "PRINTING".to_string(),
+                    title: Some(job_title.clone()),
+                    submitted_at: now.clone(),
+                    updated_at: now.clone(),
+                    managed_by_xer_service: true,
+                    submission_state: "SUBMITTED".to_string(),
+                    recovery_state: "NOT_APPLICABLE".to_string(),
+                    last_known_native_status: Some("PRINTING".to_string()),
+                    retry_count: 0,
+                    cancellation_requested: false,
+                    completed_at: None,
+                    failed_at: None,
+                    error_code: None,
+                    error_message: None,
+                };
+                let _ = super::persistence::upsert_record(updated_record, None);
+
+                Ok(NativePrintJobResponse {
+                    job_id,
+                    status: "PRINTING".to_string(),
+                    printer_id: target_printer.printer_id.clone(),
+                    submitted_at: now,
+                    native_job_id,
+                    error_code: None,
+                    message: format!("Job spooled successfully to Windows printer '{}'. {}", target_printer.name, stdout),
+                    retryable: false,
+                })
+            }
+            Ok(out) => {
+                let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+
+                let failed_record = super::persistence::PrintJobRecord {
+                    local_job_id: job_id.clone(),
+                    xer_service_order_id: req.order_id.clone(),
+                    native_job_id: None,
+                    printer_id: target_printer.name.clone(),
+                    status: "FAILED".to_string(),
+                    title: Some(job_title.clone()),
+                    submitted_at: now.clone(),
+                    updated_at: now.clone(),
+                    managed_by_xer_service: true,
+                    submission_state: "FAILED".to_string(),
+                    recovery_state: "NOT_APPLICABLE".to_string(),
+                    last_known_native_status: None,
+                    retry_count: 0,
+                    cancellation_requested: false,
+                    completed_at: None,
+                    failed_at: Some(now.clone()),
+                    error_code: Some(CanonicalPrintErrorCode::PrintSubmissionFailed.as_str().to_string()),
+                    error_message: Some(format!("Windows print command failed: {}{}", stdout, stderr)),
+                };
+                let _ = super::persistence::upsert_record(failed_record, None);
+
+                Ok(NativePrintJobResponse {
+                    job_id,
+                    status: "FAILED".to_string(),
+                    printer_id: target_printer.printer_id.clone(),
+                    submitted_at: now,
+                    native_job_id: None,
+                    error_code: Some(CanonicalPrintErrorCode::PrintSubmissionFailed.as_str().to_string()),
+                    message: format!("Windows print command failed: {}{}", stdout, stderr),
+                    retryable: false,
+                })
+            }
+            Err(e) => {
+                Ok(NativePrintJobResponse {
+                    job_id,
+                    status: "FAILED".to_string(),
+                    printer_id: target_printer.printer_id.clone(),
+                    submitted_at: now,
+                    native_job_id: None,
+                    error_code: Some(CanonicalPrintErrorCode::PrintSubmissionFailed.as_str().to_string()),
+                    message: format!("Failed to invoke powershell: {}", e),
+                    retryable: false,
+                })
+            }
+        }
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        let _ = fs::remove_file(&file_to_print);
         println!("[RUST_IPC_HANDLER] STAGE_E_SUBMISSION_FAILED: Unsupported OS platform");
         Ok(NativePrintJobResponse {
             job_id,

@@ -339,6 +339,10 @@ fn get_order_print_job(order_id: String, app: tauri::AppHandle) -> Result<Option
 /// Directly executes the identical native Rust functions that Tauri commands invoke.
 pub fn dispatch_cli_command(cmd: &str, payload: &str) -> Result<String, String> {
     match cmd {
+        "get_runtime_info" => {
+            let info = get_runtime_info()?;
+            serde_json::to_string(&info).map_err(|e| e.to_string())
+        }
         "list_printers" => {
             let printers = list_native_printers()?;
             serde_json::to_string(&printers).map_err(|e| e.to_string())

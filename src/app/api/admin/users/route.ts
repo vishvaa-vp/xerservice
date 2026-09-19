@@ -11,7 +11,7 @@ export interface AdminUserRecord {
     fullName: string | null;
     email: string | null;
     phone: string | null;
-    role: 'customer' | 'vendor' | 'admin';
+    role: 'customer' | 'vendor' | 'admin' | 'support';
     assignedShop: {
         id: string;
         name: string;
@@ -36,6 +36,8 @@ export interface AdminUserRecord {
     lastSignInAt: string | null;
     createdAt: string;
     created: string;
+    deleteRequest?: { status: string; reason: string; requested_at: string } | null;
+    linkedEmails?: string[];
 }
 
 /** GET /api/admin/users
@@ -138,6 +140,7 @@ export async function GET(req: NextRequest) {
             banned_until?: string | null;
             last_sign_in_at?: string | null;
             email_confirmed_at?: string | null;
+            user_metadata?: any;
         }> = {};
         for (const u of allAuthUsers) {
             authLookup[u.id] = {
@@ -145,6 +148,7 @@ export async function GET(req: NextRequest) {
                 banned_until: u.banned_until ?? null,
                 last_sign_in_at: u.last_sign_in_at ?? null,
                 email_confirmed_at: u.email_confirmed_at ?? null,
+                user_metadata: u.user_metadata,
             };
         }
 
@@ -165,6 +169,13 @@ export async function GET(req: NextRequest) {
             const gross = Math.round((grossSpendMap[p.user_id] ?? 0) * 100) / 100;
             const refAmt = Math.round((refundMap[p.user_id] ?? 0) * 100) / 100;
             const net = Math.max(0, Math.round((gross - refAmt) * 100) / 100);
+
+            const deleteRequest = a.user_metadata?.delete_request?.status === 'PENDING'
+                ? a.user_metadata.delete_request
+                : null;
+            const linkedEmails: string[] = Array.isArray(a.user_metadata?.linked_emails)
+                ? a.user_metadata.linked_emails
+                : [];
 
             return {
                 userId: p.user_id,
@@ -189,6 +200,8 @@ export async function GET(req: NextRequest) {
                 lastSignInAt: a.last_sign_in_at ?? null,
                 createdAt: p.created_at,
                 created: p.created_at,
+                deleteRequest,
+                linkedEmails,
             };
         });
 
@@ -201,6 +214,7 @@ export async function GET(req: NextRequest) {
             inactive: allUserRecords.filter(u => u.accountCategory === 'inactive').length,
             disabled: allUserRecords.filter(u => u.accountCategory === 'inactive').length,
             pending: allUserRecords.filter(u => u.accountCategory === 'pending').length,
+            pendingDelete: allUserRecords.filter(u => Boolean(u.deleteRequest)).length,
         };
 
         // 8. Apply search and filters
@@ -217,6 +231,8 @@ export async function GET(req: NextRequest) {
                 filtered = filtered.filter(u => u.accountCategory === 'inactive');
             } else if (statusFilter === 'pending') {
                 filtered = filtered.filter(u => u.accountCategory === 'pending');
+            } else if (statusFilter === 'pending_delete') {
+                filtered = filtered.filter(u => Boolean(u.deleteRequest));
             }
         }
 
@@ -316,9 +332,9 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        if (role !== 'customer' && role !== 'vendor') {
+        if (role !== 'customer' && role !== 'vendor' && role !== 'support') {
             return NextResponse.json(
-                { error: "Invalid role specified. Permitted roles are 'customer' and 'vendor'." },
+                { error: "Invalid role specified. Permitted roles are 'customer', 'vendor', and 'support'." },
                 { status: 400 }
             );
         }

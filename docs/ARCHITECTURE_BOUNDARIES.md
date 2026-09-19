@@ -1,3 +1,5 @@
+> Historical migration plan. Superseded by the one-website plus native-desktop setup in [README](../README.md). Separate user/admin/vendor frontend projects have been retired.
+
 # XerService — Architecture Boundaries & Monorepo Migration Blueprint
 
 > **Status**: FROZEN (Architecture & Boundary Specification Only)

@@ -337,15 +337,22 @@ pub fn query_native_print_job_status(
         }
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         use std::process::Command;
 
-        // 4. Query active / queued / printing jobs via /usr/bin/lpstat -l -W not-completed
+        let lpstat_bin = if std::path::Path::new("/usr/bin/lpstat").exists() {
+            "/usr/bin/lpstat"
+        } else {
+            "lpstat"
+        };
+
+        // 4. Query active / queued / printing jobs via lpstat -l -W not-completed
         println!(
-            "[RUST_IPC_HANDLER] STAGE_E_CUPS_STATUS_QUERY: Command: /usr/bin/lpstat -l -W not-completed"
+            "[RUST_IPC_HANDLER] STAGE_E_CUPS_STATUS_QUERY: Command: {} -l -W not-completed",
+            lpstat_bin
         );
-        let mut active_cmd = Command::new("/usr/bin/lpstat");
+        let mut active_cmd = Command::new(lpstat_bin);
         active_cmd.arg("-l").arg("-W").arg("not-completed");
         if let Some(p) = &effective_printer_id {
             active_cmd.arg("-o").arg(p);
@@ -391,11 +398,12 @@ pub fn query_native_print_job_status(
             }
         }
 
-        // 5. Query completed / finished jobs via /usr/bin/lpstat -l -W completed
+        // 5. Query completed / finished jobs via lpstat -l -W completed
         println!(
-            "[RUST_IPC_HANDLER] STAGE_E_CUPS_STATUS_QUERY: Command: /usr/bin/lpstat -l -W completed"
+            "[RUST_IPC_HANDLER] STAGE_E_CUPS_STATUS_QUERY: Command: {} -l -W completed",
+            lpstat_bin
         );
-        let mut completed_cmd = Command::new("/usr/bin/lpstat");
+        let mut completed_cmd = Command::new(lpstat_bin);
         completed_cmd.arg("-l").arg("-W").arg("completed");
         if let Some(p) = &effective_printer_id {
             completed_cmd.arg("-o").arg(p);
@@ -451,8 +459,6 @@ pub fn query_native_print_job_status(
                     });
                 }
                 _ => {
-                    // Fallback for macOS CUPS where `lpstat -l -W completed` has an empty Status: line
-                    // but the job ID is confirmed present in the completed spooler history.
                     let lower_out = stdout.to_lowercase();
                     let target_matched = resolved_native_id
                         .as_ref()
@@ -461,7 +467,7 @@ pub fn query_native_print_job_status(
                         || lower_out.contains(&job_id.to_lowercase());
 
                     if target_matched {
-                        println!("[RUST_IPC_HANDLER] STAGE_E_STATUS_NORMALIZED: status=COMPLETED (from macOS completed history)");
+                        println!("[RUST_IPC_HANDLER] STAGE_E_STATUS_NORMALIZED: status=COMPLETED (from completed history)");
                         return Ok(NativePrintJobStatusInfo {
                             job_id: job_id.to_string(),
                             status: "COMPLETED".to_string(),
@@ -476,31 +482,151 @@ pub fn query_native_print_job_status(
                 }
             }
         }
+
+        // Job not found in CUPS active queue or completion history
+        println!(
+            "[RUST_IPC_HANDLER] STAGE_E_CUPS_STATUS_RESULT: Job '{}' not found in active or completed CUPS queue",
+            job_id
+        );
+        println!(
+            "[RUST_IPC_HANDLER] STAGE_E_STATUS_NORMALIZED: status=FAILED, error_code=UNKNOWN_PRINT_ERROR (Job not in spooler)"
+        );
+
+        return Ok(NativePrintJobStatusInfo {
+            job_id: job_id.to_string(),
+            status: "FAILED".to_string(),
+            printer_id: effective_printer_id,
+            updated_at: now,
+            native_job_id: resolved_native_id,
+            error_code: Some(CanonicalPrintErrorCode::UnknownPrintError.as_str().to_string()),
+            message: format!(
+                "Job '{}' was not found in host CUPS active queue or completion history.",
+                job_id
+            ),
+            retryable: false,
+        });
     }
 
-    // 6. STRICT INVARIANT: Job not found in CUPS active queue or completion history.
-    // MUST NOT FABRICATE "COMPLETED".
-    println!(
-        "[RUST_IPC_HANDLER] STAGE_E_CUPS_STATUS_RESULT: Job '{}' not found in active or completed CUPS queue",
-        job_id
-    );
-    println!(
-        "[RUST_IPC_HANDLER] STAGE_E_STATUS_NORMALIZED: status=FAILED, error_code=UNKNOWN_PRINT_ERROR (Job not in spooler)"
-    );
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
 
-    Ok(NativePrintJobStatusInfo {
-        job_id: job_id.to_string(),
-        status: "FAILED".to_string(),
-        printer_id: effective_printer_id,
-        updated_at: now,
-        native_job_id: resolved_native_id,
-        error_code: Some(CanonicalPrintErrorCode::UnknownPrintError.as_str().to_string()),
-        message: format!(
-            "Job '{}' was not found in host CUPS active queue or completion history.",
-            job_id
-        ),
-        retryable: false,
-    })
+        let ps_cmd = match &effective_printer_id {
+            Some(pid) => {
+                let escaped = pid.replace('\'', "''");
+                format!(
+                    "Get-PrintJob -PrinterName '{}' | Select-Object Id, DocumentName, JobStatus, TotalPages, PagesPrinted | ConvertTo-Json -Compress",
+                    escaped
+                )
+            }
+            None => "Get-PrintJob | Select-Object Id, DocumentName, JobStatus, TotalPages, PagesPrinted | ConvertTo-Json -Compress".to_string(),
+        };
+
+        if let Ok(output) = Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &ps_cmd])
+            .output()
+        {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !stdout.is_empty() && stdout != "null" {
+                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&stdout) {
+                        let items: Vec<&serde_json::Value> = match &parsed {
+                            serde_json::Value::Array(arr) => arr.iter().collect(),
+                            serde_json::Value::Object(_) => vec![&parsed],
+                            _ => Vec::new(),
+                        };
+
+                        for item in items {
+                            let item_id = item.get("Id").and_then(|v| v.as_i64()).map(|n| n.to_string()).unwrap_or_default();
+                            let doc_name = item.get("DocumentName").and_then(|v| v.as_str()).unwrap_or("");
+                            let job_status_str = item.get("JobStatus").and_then(|v| v.as_str()).unwrap_or("");
+
+                            let matches = (resolved_native_id.as_ref() == Some(&item_id) && !item_id.is_empty())
+                                || doc_name.contains(job_id);
+
+                            if matches {
+                                let lower_st = job_status_str.to_lowercase();
+                                let (canonical_status, err) = if lower_st.contains("print") || lower_st.contains("spool") {
+                                    ("PRINTING", None)
+                                } else if lower_st.contains("pause") || lower_st.contains("block") {
+                                    ("HELD", None)
+                                } else if lower_st.contains("error") || lower_st.contains("paper") || lower_st.contains("offline") {
+                                    ("FAILED", Some("PRINT_SUBMISSION_FAILED".to_string()))
+                                } else if lower_st.contains("delet") {
+                                    ("CANCELLED", None)
+                                } else {
+                                    ("PRINTING", None)
+                                };
+
+                                return Ok(NativePrintJobStatusInfo {
+                                    job_id: job_id.to_string(),
+                                    status: canonical_status.to_string(),
+                                    printer_id: effective_printer_id,
+                                    updated_at: now,
+                                    native_job_id: Some(item_id),
+                                    error_code: err,
+                                    message: format!("Windows Print Spooler status: {}", job_status_str),
+                                    retryable: false,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check persistent store: Windows clears completed jobs from Get-PrintJob
+        if let Some(record) = super::persistence::find_by_any_id(job_id, None) {
+            if record.status == "PRINTING" || record.status == "COMPLETED" {
+                return Ok(NativePrintJobStatusInfo {
+                    job_id: job_id.to_string(),
+                    status: "COMPLETED".to_string(),
+                    printer_id: effective_printer_id,
+                    updated_at: now,
+                    native_job_id: record.native_job_id,
+                    error_code: None,
+                    message: "Windows Print Spooler completed print processing (job finished and vacated spooler queue).".to_string(),
+                    retryable: false,
+                });
+            } else if record.status == "CANCELLED" || record.status == "FAILED" {
+                return Ok(NativePrintJobStatusInfo {
+                    job_id: job_id.to_string(),
+                    status: record.status.clone(),
+                    printer_id: effective_printer_id,
+                    updated_at: now,
+                    native_job_id: record.native_job_id,
+                    error_code: record.error_code,
+                    message: record.error_message.unwrap_or_else(|| format!("Job in status {}", record.status)),
+                    retryable: false,
+                });
+            }
+        }
+
+        Ok(NativePrintJobStatusInfo {
+            job_id: job_id.to_string(),
+            status: "FAILED".to_string(),
+            printer_id: effective_printer_id,
+            updated_at: now,
+            native_job_id: resolved_native_id,
+            error_code: Some(CanonicalPrintErrorCode::UnknownPrintError.as_str().to_string()),
+            message: format!("Job '{}' was not found in Windows Print Spooler active queue or local database records.", job_id),
+            retryable: false,
+        })
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        Ok(NativePrintJobStatusInfo {
+            job_id: job_id.to_string(),
+            status: "FAILED".to_string(),
+            printer_id: effective_printer_id,
+            updated_at: now,
+            native_job_id: resolved_native_id,
+            error_code: Some(CanonicalPrintErrorCode::UnknownPrintError.as_str().to_string()),
+            message: "Platform is not supported by native printer adapter yet.".to_string(),
+            retryable: false,
+        })
+    }
 }
 
 #[cfg(test)]

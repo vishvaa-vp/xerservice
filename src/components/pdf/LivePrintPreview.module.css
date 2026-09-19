@@ -20,8 +20,17 @@
 .empty { position: absolute; inset: 20px; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center; color: var(--fg-muted); font-size: 13px; text-align: center; }
 .details { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px 14px; margin-top: 14px; font-size: 12px; color: var(--fg-muted); }
 .binding { margin-top: 8px; color: var(--fg-muted); font-size: 12px; }
-.spinner { animation: live-preview-spin 1s linear infinite; }
+.spinner { animation: live-preview-spin 1s linear infinite; color: var(--accent); }
 @keyframes live-preview-spin { to { transform: rotate(360deg); } }
 @media (max-width: 768px) { .stage { --stage-height: clamp(100px, 24dvh, 215px); padding: 12px; } .paper { width: min(100%, calc((var(--stage-height) - 26px) * var(--paper-ratio))); } .heading { margin-bottom: 8px; } .toolbar { margin-bottom: 8px; } .details { margin-top: 8px; } .binding { margin-top: 4px; } .toolbar button { min-width: 44px; height: 44px; } }
 @media (prefers-reduced-motion: reduce) { .paper { transition: none; } .spinner { animation: none; } }
 @media (max-width: 768px) { .stage.review { --stage-height: clamp(280px, 50dvh, 430px); } }
+
+@media (max-width: 768px) {
+    .root { width: 100%; max-width: 100%; }
+    .heading { flex-wrap: wrap; gap: 4px 12px; }
+    .toolbar { flex-wrap: wrap; gap: 6px; }
+    .toolbar > span { min-width: 74px; }
+    .toolbar .flipButton { flex-grow: 1; }
+    .status { max-width: calc(100% - 16px); white-space: normal; text-align: center; font-size: 11px; }
+}

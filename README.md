@@ -6,10 +6,7 @@ XerService is a print-order platform with customer, administrator, shop-vendor, 
 
 | Path | Purpose |
 | --- | --- |
-| `src/` | Canonical Next.js application and API routes |
-| `apps/user` | Customer web application on port 3001 |
-| `apps/vendor` | Vendor web application on port 3002 |
-| `apps/admin` | Administrator web application on port 3003 |
+| `src/` | One website: customers, admin, support, and API routes |
 | `apps/desktop` | Tauri v2 vendor workstation and native print integration |
 | `packages/backend` | Server-only auth, payments, pricing, finance, notification, and WhatsApp services |
 | `packages/shared` | Shared domain helpers |
@@ -18,7 +15,7 @@ XerService is a print-order platform with customer, administrator, shop-vendor, 
 | `supabase/migrations` | Ordered database and storage migrations |
 | `docs` | Architecture and product completion documents |
 
-The architecture boundaries are documented in [docs/ARCHITECTURE_BOUNDARIES.md](docs/ARCHITECTURE_BOUNDARIES.md) and [docs/DESKTOP_ARCHITECTURE.md](docs/DESKTOP_ARCHITECTURE.md).
+Older multi-frontend migration documents in `docs/` describe historical plans. The supported setup is now one website plus the desktop app.
 
 ## Prerequisites
 
@@ -38,7 +35,7 @@ The architecture boundaries are documented in [docs/ARCHITECTURE_BOUNDARIES.md](
    pnpm install --frozen-lockfile
    ```
 
-2. Copy `.env.example` to `.env.local` and provide the required values. When running an application directly from `apps/`, copy its relevant public values to that application's `.env.local`. The desktop Vite application uses the `VITE_*` values documented in the template.
+2. Copy `.env.example` to `.env.local` and provide the required values. The desktop automatically reuses the public Supabase URL and publishable key from this file. Optional desktop overrides belong in `apps/desktop/.env.local`; never put server secrets in `VITE_*` variables.
 
 3. Apply the SQL files in `supabase/migrations` to the intended Supabase project in filename order. Review the target project before applying migrations.
 
@@ -50,14 +47,23 @@ The architecture boundaries are documented in [docs/ARCHITECTURE_BOUNDARIES.md](
 
    The application runs at [http://localhost:3000](http://localhost:3000).
 
-Individual applications can also be started with pnpm filters:
+The website includes customer pages at `/`, administration at `/admin`, and the existing admin support workspace at `/admin/support`. All use the same backend and Supabase project.
+
+For the **native vendor desktop app**, keep the website running and open a second terminal in this folder:
 
 ```bash
-pnpm --filter @apps/user dev
-pnpm --filter @apps/vendor dev
-pnpm --filter @apps/admin dev
-pnpm --filter @apps/desktop dev
+pnpm desktop
 ```
+
+This opens a native application window. `pnpm --filter @apps/desktop dev` starts only the browser preview and does not provide native printing. Close an existing preview server on port 1420 before launching Tauri.
+
+To produce the macOS application and installer:
+
+```bash
+pnpm package:desktop
+```
+
+The `.app` and `.dmg` are written under `apps/desktop/src-tauri/target/release/bundle/`. Local development connects to the website on port 3000. A distributed build needs the intended production backend configured and signing/notarization for normal macOS distribution.
 
 ## Validation
 

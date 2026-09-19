@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { X, Minus, Plus, FileText, Palette, Layers, Sparkles } from 'lucide-react';
+import { X, Minus, Plus, FileText, Palette, Layers, Sparkles, Check } from 'lucide-react';
 import { selectedPageNumbers, type PrintSettings } from '@/lib/print-settings';
 import LivePrintPreview from '@/components/pdf/LivePrintPreview';
 import styles from './PrintSettingsModal.module.css';
@@ -42,11 +42,12 @@ interface Props {
     file: { file: File; pages: number; settings: PrintSettings };
     hasMultiple: boolean;
     onClose: () => void;
-    onSave: (settings: PrintSettings, applyAll: boolean) => void | Promise<void>;
+    onSave: (settings: PrintSettings, applyAll: boolean) => void | boolean | Promise<void | boolean>;
+    onAddFiles?: () => void;
     shopId?: string;
 }
 
-export default function PrintSettingsModal({ file, hasMultiple, onClose, onSave, error, shopId }: Props) {
+export default function PrintSettingsModal({ file, hasMultiple, onClose, onSave, error, shopId, onAddFiles }: Props) {
     const [settings, setSettings] = useState<PrintSettings>({
         ...file.settings,
         addonIds: file.settings.addonIds || [],
@@ -114,6 +115,20 @@ export default function PrintSettingsModal({ file, hasMultiple, onClose, onSave,
         return sum + Number(price);
     }, 0);
     const modalTotal = Math.round((printingAmount + addonsAmount) * 100) / 100;
+
+    const persist = async (addFiles: boolean) => {
+        if (saving) return;
+        setSaving(true);
+        setSaveError('');
+        try {
+            const saved = await onSave(settings, applyAll);
+            if (saved !== false && addFiles) onAddFiles?.();
+        } catch {
+            setSaveError('Your settings could not be saved. Please try again.');
+        } finally {
+            setSaving(false);
+        }
+    };
 
     return (
         <dialog ref={dialog} className={styles.modal} aria-labelledby="print-settings-title" onCancel={onClose}>
@@ -217,6 +232,24 @@ export default function PrintSettingsModal({ file, hasMultiple, onClose, onSave,
                                                 </div>
                                                 {warningMsg && <div className={styles.addonWarning}>{warningMsg}</div>}
                                             </div>
+                                            <button
+                                                type="button"
+                                                className={`${styles.addonAddBtn} ${isSelected ? styles.addonAddedBtn : ''}`}
+                                                disabled={isDisabled}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (!isDisabled) toggleAddon(addonId);
+                                                }}
+                                                aria-label={isSelected ? `Remove ${name}` : `Add ${name}`}
+                                            >
+                                                {isSelected ? (
+                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                                        <Check size={13} style={{ strokeWidth: 3 }} /> Added
+                                                    </span>
+                                                ) : (
+                                                    '+ Add'
+                                                )}
+                                            </button>
                                             <input
                                                 type="checkbox"
                                                 className={styles.addonCheckbox}
@@ -226,6 +259,8 @@ export default function PrintSettingsModal({ file, hasMultiple, onClose, onSave,
                                                     if (!isDisabled) toggleAddon(addonId);
                                                 }}
                                                 onClick={e => e.stopPropagation()}
+                                                style={{ display: 'none' }}
+                                                aria-hidden="true"
                                             />
                                         </div>
                                     );
@@ -240,7 +275,11 @@ export default function PrintSettingsModal({ file, hasMultiple, onClose, onSave,
                 <strong className="mobile-only mobile-settings-price" aria-live="polite">{selectedPagesList.length} selected pages · Final price at review</strong>
                 {(error || saveError) && <p role="alert">{error || saveError}</p>}
                 {hasMultiple ? <label className={styles.checkbox}><input type="checkbox" checked={applyAll} onChange={e => setApplyAll(e.target.checked)} />Apply print settings to all documents</label> : <span />}
-                <div className={styles.actions}><button type="button" className="btn btn-outline" onClick={onClose}>Cancel</button><button type="button" className="btn btn-accent" disabled={!selectionValid || saving} onClick={async () => { if (saving) return; setSaving(true); setSaveError(''); try { await onSave(settings, applyAll); } catch { setSaveError('Your settings could not be saved. Please try again.'); } finally { setSaving(false); } }}>{saving ? 'Saving…' : 'Apply Settings'}</button></div>
+                <div className={styles.actions}>
+                    <button type="button" className="btn btn-outline" onClick={onClose}>Cancel</button>
+                    {onAddFiles && <button type="button" className="btn btn-outline" disabled={!selectionValid || saving} onClick={() => persist(true)}><Plus size={16} /> Save & add PDF</button>}
+                    <button type="button" className="btn btn-accent" disabled={!selectionValid || saving} onClick={() => persist(false)}>{saving ? 'Saving…' : 'Apply Settings'}</button>
+                </div>
             </footer>
         </dialog>
     );

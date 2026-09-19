@@ -6,6 +6,9 @@ import { customerDestination } from '@/lib/customer-navigation';
 import { supabase, exchangeAuthCode, hasRecoverySession } from '@/lib/supabase/client';
 import { useApp } from '@/context/AppContext';
 
+// Auth session exchange: exchangeCodeForSession & onAuthStateChange handler
+const safeRedirect = customerDestination;
+
 function AuthCallbackContent() {
     const router = useRouter();
     const searchParams = useSearchParams();

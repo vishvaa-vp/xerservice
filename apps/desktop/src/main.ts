@@ -1209,7 +1209,7 @@ if (typeof window !== 'undefined') {
     async function ui_checkBackendHealth() {
         try {
             const start = Date.now();
-            const res = await fetch(`${ui_backendUrl}/api/health`, { cache: 'no-store' });
+            const res = await fetch(`${ui_backendUrl}/api/health`, { cache: 'no-store', signal: AbortSignal.timeout(10_000) });
             if (res.ok) {
                 ui_backendReachable = true;
                 ui_backendLatencyMs = Math.max(1, Date.now() - start);
@@ -2893,6 +2893,7 @@ if (typeof window !== 'undefined') {
         if (spinner) spinner.style.display = 'inline-block';
         if (errorBox) errorBox.style.display = 'none';
 
+        let signInStage: 'authentication' | 'backend' | 'printers' = 'authentication';
         try {
             // 1. Authenticate against Supabase Auth authority with in-memory session (never in localStorage)
             const session = await authenticateVendor(email, password);
@@ -2905,6 +2906,7 @@ if (typeof window !== 'undefined') {
             ui_ordersError = null;
             ui_renderOrdersLoading('orders-tbody');
 
+            signInStage = 'backend';
             const orders = await fetchVendorQueueOrders(ui_backendUrl, session.accessToken);
             ui_orders = orders;
             loadedVendorOrders = orders;
@@ -2912,6 +2914,7 @@ if (typeof window !== 'undefined') {
             void recordFrontendTelemetry('STAGE_5_STATE_LENGTH', undefined, `count=${ui_orders.length}`);
 
             // 3. Discover host printers
+            signInStage = 'printers';
             ui_printers = await fetchPrinters();
             discoveredPrinters = ui_printers;
 
@@ -2926,7 +2929,9 @@ if (typeof window !== 'undefined') {
             if (avatarEl) avatarEl.textContent = (session.fullName || session.email || 'V').charAt(0).toUpperCase();
 
             // 5. Clear password from input element for security
-            if (passwordInput) passwordInput.value = '';
+            if (passwordInput) { passwordInput.value = ''; passwordInput.type = 'password'; }
+            const toggle = document.getElementById('toggle-password');
+            if (toggle) { toggle.textContent = 'Show'; toggle.setAttribute('aria-label', 'Show password'); toggle.setAttribute('aria-pressed', 'false'); }
 
             // 6. Ensure localStorage NEVER contains any authentication token
             try {
@@ -2958,9 +2963,14 @@ if (typeof window !== 'undefined') {
             if (errorBox) {
                 let msg = err?.message || 'Authentication failed. Please check your credentials.';
                 if (msg === 'Load failed' || msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
-                    msg = `Could not connect to XerService backend at ${ui_backendUrl}.`;
+                    errorBox.textContent = signInStage === 'authentication'
+                        ? 'Could not reach the sign-in service. Check your internet connection and Supabase configuration, then try again.'
+                        : signInStage === 'backend'
+                            ? `Could not reach the website server at ${ui_backendUrl}. For local development, run pnpm dev in the project folder and try again.`
+                            : 'Could not connect to the printer service. Open the native app with pnpm desktop and try again.';
+                } else {
+                    errorBox.textContent = msg;
                 }
-                errorBox.textContent = msg;
                 errorBox.style.display = 'block';
             }
         } finally {
@@ -2972,14 +2982,65 @@ if (typeof window !== 'undefined') {
 
     // Vendor Dashboard UI initialization
     async function vendorUIBootstrap() {
-        // Get backend URL from runtime
-        try {
-            const rt = await fetchRuntimeInfo();
-            ui_backendUrl = rt.backendUrl || DEFAULT_BACKEND_URL;
-            currentBackendUrl = ui_backendUrl;
-            const internalUrl = document.getElementById('internal-backend-url') as HTMLInputElement | null;
-            if (internalUrl) internalUrl.value = ui_backendUrl;
-        } catch { /* use default */ }
+        // Initialize backend URL from saved preference, runtime, or default
+        const savedUrl = (typeof localStorage !== 'undefined') ? localStorage.getItem('xerservice_desktop_backend_url') : null;
+        if (savedUrl) {
+            ui_backendUrl = savedUrl;
+            currentBackendUrl = savedUrl;
+        } else {
+            try {
+                const rt = await fetchRuntimeInfo();
+                ui_backendUrl = rt.backendUrl || DEFAULT_BACKEND_URL;
+                currentBackendUrl = ui_backendUrl;
+            } catch {
+                ui_backendUrl = DEFAULT_BACKEND_URL;
+                currentBackendUrl = ui_backendUrl;
+            }
+        }
+
+        // Synchronize server selection UI
+        const serverSel = document.getElementById('login-server-url') as HTMLSelectElement | null;
+        const customServerInput = document.getElementById('login-custom-server') as HTMLInputElement | null;
+        if (serverSel) {
+            if (ui_backendUrl === 'http://localhost:3000' || ui_backendUrl === 'https://api.xerservice.in') {
+                serverSel.value = ui_backendUrl;
+                if (customServerInput) customServerInput.style.display = 'none';
+            } else {
+                serverSel.value = 'custom';
+                if (customServerInput) {
+                    customServerInput.style.display = 'block';
+                    customServerInput.value = ui_backendUrl;
+                }
+            }
+            serverSel.addEventListener('change', () => {
+                if (serverSel.value === 'custom') {
+                    if (customServerInput) {
+                        customServerInput.style.display = 'block';
+                        customServerInput.focus();
+                    }
+                } else {
+                    if (customServerInput) customServerInput.style.display = 'none';
+                    ui_backendUrl = serverSel.value;
+                    currentBackendUrl = ui_backendUrl;
+                    try { localStorage.setItem('xerservice_desktop_backend_url', ui_backendUrl); } catch { /* ignore */ }
+                    void ui_checkBackendHealth();
+                }
+            });
+        }
+        if (customServerInput) {
+            customServerInput.addEventListener('input', () => {
+                const val = customServerInput.value.trim();
+                if (val) {
+                    ui_backendUrl = val;
+                    currentBackendUrl = ui_backendUrl;
+                    try { localStorage.setItem('xerservice_desktop_backend_url', ui_backendUrl); } catch { /* ignore */ }
+                    void ui_checkBackendHealth();
+                }
+            });
+        }
+
+        const internalUrl = document.getElementById('internal-backend-url') as HTMLInputElement | null;
+        if (internalUrl) internalUrl.value = ui_backendUrl;
 
         // Initial honest connectivity ping and HUD refresh
         void ui_checkBackendHealth();
@@ -2989,6 +3050,18 @@ if (typeof window !== 'undefined') {
         try {
             localStorage.removeItem('xerservice_vendor_token');
         } catch { /* ignore */ }
+
+        // Accessible visibility toggle; showing a password never submits the form.
+        const passwordInput = document.getElementById('login-password') as HTMLInputElement | null;
+        const passwordToggle = document.getElementById('toggle-password');
+        passwordToggle?.addEventListener('click', () => {
+            if (!passwordInput) return;
+            const show = passwordInput.type === 'password';
+            passwordInput.type = show ? 'text' : 'password';
+            passwordToggle.textContent = show ? 'Hide' : 'Show';
+            passwordToggle.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+            passwordToggle.setAttribute('aria-pressed', String(show));
+        });
 
         // Sign-in button & keyboard enter handlers
         document.getElementById('btn-sign-in')?.addEventListener('click', ui_signIn);

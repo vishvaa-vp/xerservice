@@ -42,6 +42,39 @@ export async function PATCH(
             updatePayload.is_available = Boolean(body.isAvailable);
         }
 
+        // If add-on metadata is provided, update underlying addon record as well
+        if (
+            body.name !== undefined ||
+            body.description !== undefined ||
+            body.estimatedMinutes !== undefined ||
+            body.minPages !== undefined ||
+            body.maxPages !== undefined ||
+            body.imageUrl !== undefined ||
+            body.image_url !== undefined
+        ) {
+            const { data: currentSa } = await sb
+                .from('shop_addons')
+                .select('addon_id')
+                .eq('id', shopAddonId)
+                .eq('shop_id', shopId)
+                .maybeSingle();
+
+            if (currentSa?.addon_id) {
+                const addonUpdates: Record<string, any> = {};
+                if (body.name && String(body.name).trim()) addonUpdates.name = String(body.name).trim();
+                if (body.description !== undefined) addonUpdates.description = body.description ? String(body.description).trim() : null;
+                if (body.imageUrl !== undefined) addonUpdates.image_url = body.imageUrl ? String(body.imageUrl).trim() : null;
+                else if (body.image_url !== undefined) addonUpdates.image_url = body.image_url ? String(body.image_url).trim() : null;
+                if (body.estimatedMinutes !== undefined) addonUpdates.estimated_minutes = Math.max(0, parseInt(body.estimatedMinutes) || 0);
+                if (body.minPages !== undefined) addonUpdates.min_pages = Math.max(1, parseInt(body.minPages) || 1);
+                if (body.maxPages !== undefined) addonUpdates.max_pages = Math.max(1, parseInt(body.maxPages) || 100);
+
+                if (Object.keys(addonUpdates).length > 0) {
+                    await sb.from('addons').update(addonUpdates).eq('id', currentSa.addon_id);
+                }
+            }
+        }
+
         const { data: updated, error: updateErr } = await sb
             .from('shop_addons')
             .update(updatePayload)

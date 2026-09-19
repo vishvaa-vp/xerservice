@@ -25,6 +25,7 @@ import {
     Check,
     LogOut,
     ExternalLink,
+    LifeBuoy,
     Trash2,
     Clock,
 } from 'lucide-react';
@@ -41,7 +42,7 @@ interface UserRecord {
     fullName: string | null;
     email: string | null;
     phone: string | null;
-    role: 'customer' | 'vendor' | 'admin';
+    role: 'customer' | 'vendor' | 'admin' | 'support';
     assignedShop: {
         id: string;
         name: string;
@@ -66,6 +67,8 @@ interface UserRecord {
     lastSignInAt: string | null;
     createdAt: string;
     created: string;
+    deleteRequest?: { status: string; reason: string; requested_at?: string; requestedAt?: string } | null;
+    linkedEmails?: string[];
 }
 
 interface SummaryMetrics {
@@ -76,6 +79,7 @@ interface SummaryMetrics {
     disabled: number;
     inactive?: number;
     pending?: number;
+    pendingDelete?: number;
 }
 
 export default function AdminUsersAndVendorsPage() {
@@ -131,8 +135,7 @@ function AdminUsersAndVendorsContent() {
     const [detailUser, setDetailUser] = useState<any | null>(null);
     const [loadingDetail, setLoadingDetail] = useState(false);
 
-    // Create form state
-    const [createRole, setCreateRole] = useState<'customer' | 'vendor'>('customer');
+    const [createRole, setCreateRole] = useState<'customer' | 'vendor' | 'support'>('customer');
     const [createFullName, setCreateFullName] = useState('');
     const [createEmail, setCreateEmail] = useState('');
     const [createPhone, setCreatePhone] = useState('');
@@ -149,7 +152,7 @@ function AdminUsersAndVendorsContent() {
     // Edit form state
     const [editFullName, setEditFullName] = useState('');
     const [editPhone, setEditPhone] = useState('');
-    const [editRole, setEditRole] = useState<'customer' | 'vendor'>('customer');
+    const [editRole, setEditRole] = useState<'customer' | 'vendor' | 'support'>('customer');
     const [editShopId, setEditShopId] = useState('');
     const [editSubmitting, setEditSubmitting] = useState(false);
     const [editError, setEditError] = useState<string | null>(null);
@@ -373,6 +376,8 @@ function AdminUsersAndVendorsContent() {
                     type: 'success',
                     message: createRole === 'vendor'
                         ? `Vendor account and print shop "${data.user?.shop?.name || createShopName}" created successfully.`
+                        : createRole === 'support'
+                        ? `Support specialist account created successfully (${createEmail}).`
                         : `Customer account created successfully (${createEmail}).`,
                 });
                 setIsCreateOpen(false);
@@ -431,6 +436,70 @@ function AdminUsersAndVendorsContent() {
         }
     };
 
+    // Approve Customer Deletion Request
+    const handleApproveDeleteRequest = async (u: UserRecord) => {
+        if (!adminToken) return;
+        const confirmMsg = `Approve account deletion for ${u.email || u.fullName || 'User'}?\nReason: ${u.deleteRequest?.reason || 'No reason provided'}`;
+        if (typeof window !== 'undefined' && !window.confirm(confirmMsg)) {
+            return;
+        }
+
+        setActionLoading(u.userId);
+        try {
+            const res = await fetch(`/api/admin/users/${u.userId}/delete-request`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${adminToken}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ action: 'approve' }),
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to approve deletion request');
+
+            setNotification({
+                type: 'success',
+                message: data.message || `Account for ${u.email || u.fullName || 'User'} processed successfully.`,
+            });
+            loadData(adminToken);
+        } catch (err: any) {
+            setNotification({ type: 'error', message: err.message });
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    // Reject / Cancel Customer Deletion Request
+    const handleRejectDeleteRequest = async (u: UserRecord) => {
+        if (!adminToken) return;
+
+        setActionLoading(u.userId);
+        try {
+            const res = await fetch(`/api/admin/users/${u.userId}/delete-request`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${adminToken}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ action: 'reject' }),
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to reject deletion request');
+
+            setNotification({
+                type: 'success',
+                message: `Deletion request for ${u.email || u.fullName || 'User'} was cancelled.`,
+            });
+            loadData(adminToken);
+        } catch (err: any) {
+            setNotification({ type: 'error', message: err.message });
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
     // Disable from Protected Modal
     const handleDisableFromProtected = async () => {
         if (!adminToken || !deleteCandidate) return;
@@ -466,7 +535,7 @@ function AdminUsersAndVendorsContent() {
         setSelectedUser(user);
         setEditFullName(user.fullName || user.name || '');
         setEditPhone(user.phone || '');
-        setEditRole(user.role === 'vendor' ? 'vendor' : 'customer');
+        setEditRole(user.role === 'vendor' ? 'vendor' : user.role === 'support' ? 'support' : 'customer');
         setEditShopId(user.assignedShop?.id || user.shop?.shopId || (availableShops[0]?.shopId ?? ''));
         setEditError(null);
         setIsEditOpen(true);
@@ -737,6 +806,49 @@ function AdminUsersAndVendorsContent() {
                 </div>
             </div>
 
+            {/* Deletion Requests Alert Banner */}
+            {(summary.pendingDelete ?? 0) > 0 && (
+                <div
+                    className="card"
+                    style={{
+                        padding: '14px 20px',
+                        marginBottom: '20px',
+                        border: '1.5px solid rgba(239, 68, 68, 0.4)',
+                        background: 'rgba(239, 68, 68, 0.08)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '14px',
+                        flexWrap: 'wrap',
+                    }}
+                >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <AlertCircle size={20} color="#ef4444" style={{ flexShrink: 0 }} />
+                        <div>
+                            <span style={{ fontSize: '14px', fontWeight: '800', color: '#ef4444' }}>
+                                {summary.pendingDelete} Account Deletion Request{summary.pendingDelete === 1 ? '' : 's'} Pending
+                            </span>
+                            <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--fg-muted)' }}>
+                                Customers have formally requested account deletion with specified reasons. Review each request before approving or rejecting.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => handleStatusFilterChange('pending_delete')}
+                        className="btn btn-outline btn-sm"
+                        style={{
+                            borderColor: 'rgba(239, 68, 68, 0.5)',
+                            color: '#ef4444',
+                            fontWeight: '700',
+                            borderRadius: '8px',
+                        }}
+                    >
+                        View Deletion Requests
+                    </button>
+                </div>
+            )}
+
             {/* Controls Bar: Search & Filters */}
             <div className="card" style={{ padding: '16px 20px', marginBottom: '20px' }}>
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
@@ -768,6 +880,7 @@ function AdminUsersAndVendorsContent() {
                                 <option value="all">All Roles</option>
                                 <option value="customer">Customers</option>
                                 <option value="vendor">Vendors</option>
+                                <option value="support">Support</option>
                                 <option value="admin">Admins</option>
                             </select>
                         </div>
@@ -785,6 +898,7 @@ function AdminUsersAndVendorsContent() {
                                 <option value="active">Active</option>
                                 <option value="pending">Pending</option>
                                 <option value="inactive">Inactive</option>
+                                <option value="pending_delete">Deletion Requested {summary.pendingDelete ? `(${summary.pendingDelete})` : ''}</option>
                             </select>
                         </div>
 
@@ -864,7 +978,7 @@ function AdminUsersAndVendorsContent() {
                                                             width: '32px',
                                                             height: '32px',
                                                             borderRadius: '50%',
-                                                            background: u.role === 'admin' ? '#f59e0b' : u.role === 'vendor' ? '#10b981' : 'var(--accent)',
+                                                            background: u.role === 'admin' ? '#f59e0b' : u.role === 'vendor' ? '#10b981' : u.role === 'support' ? '#8b5cf6' : 'var(--accent)',
                                                             color: '#fff',
                                                             display: 'flex',
                                                             alignItems: 'center',
@@ -906,10 +1020,12 @@ function AdminUsersAndVendorsContent() {
                                                         background:
                                                             u.role === 'admin' ? 'rgba(245, 158, 11, 0.15)' :
                                                             u.role === 'vendor' ? 'rgba(16, 185, 129, 0.15)' :
+                                                            u.role === 'support' ? 'rgba(139, 92, 246, 0.15)' :
                                                             'rgba(59, 130, 246, 0.15)',
                                                         color:
                                                             u.role === 'admin' ? '#d97706' :
                                                             u.role === 'vendor' ? '#059669' :
+                                                            u.role === 'support' ? '#7c3aed' :
                                                             '#2563eb',
                                                     }}>
                                                         {u.role}
@@ -930,7 +1046,22 @@ function AdminUsersAndVendorsContent() {
 
                                                 {/* Account Status */}
                                                 <td style={{ padding: '14px 16px' }}>
-                                                    {u.isDisabled || u.accountCategory === 'inactive' ? (
+                                                    {u.deleteRequest ? (
+                                                        <span style={{
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '5px',
+                                                            padding: '3px 8px',
+                                                            borderRadius: '12px',
+                                                            fontSize: '11px',
+                                                            fontWeight: '700',
+                                                            background: 'rgba(239, 68, 68, 0.15)',
+                                                            color: '#dc2626',
+                                                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                                                        }} title={`Reason: ${u.deleteRequest.reason}`}>
+                                                            <AlertCircle size={12} /> Deletion Requested
+                                                        </span>
+                                                    ) : u.isDisabled || u.accountCategory === 'inactive' ? (
                                                         <span style={{
                                                             display: 'inline-flex',
                                                             alignItems: 'center',
@@ -983,6 +1114,43 @@ function AdminUsersAndVendorsContent() {
                                             {/* Actions */}
                                             <td style={{ padding: '14px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                                                 <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+                                                    {/* Deletion Request Quick Actions */}
+                                                    {u.deleteRequest && (
+                                                        <>
+                                                            <button
+                                                                onClick={() => handleApproveDeleteRequest(u)}
+                                                                className="btn btn-sm"
+                                                                title="Approve and process account deletion"
+                                                                disabled={actionLoading === u.userId}
+                                                                style={{
+                                                                    background: '#ef4444',
+                                                                    color: '#fff',
+                                                                    fontSize: '11px',
+                                                                    padding: '4px 8px',
+                                                                    fontWeight: '700',
+                                                                    border: 'none',
+                                                                    borderRadius: '6px',
+                                                                }}
+                                                            >
+                                                                {actionLoading === u.userId ? '...' : 'Approve Delete'}
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleRejectDeleteRequest(u)}
+                                                                className="btn btn-outline btn-sm"
+                                                                title="Reject and cancel deletion request"
+                                                                disabled={actionLoading === u.userId}
+                                                                style={{
+                                                                    fontSize: '11px',
+                                                                    padding: '4px 8px',
+                                                                    fontWeight: '700',
+                                                                    borderRadius: '6px',
+                                                                }}
+                                                            >
+                                                                Reject
+                                                            </button>
+                                                        </>
+                                                    )}
+
                                                     {/* Details Button */}
                                                     <button
                                                         onClick={() => handleOpenDetail(u)}
@@ -1126,6 +1294,8 @@ function AdminUsersAndVendorsContent() {
                                 <p style={{ fontSize: '12px', color: 'var(--fg-muted)', marginTop: '2px' }}>
                                     {createRole === 'customer'
                                         ? 'Create a new customer account for ordering and tracking prints.'
+                                        : createRole === 'support'
+                                        ? 'Create a support agent account for managing customer inquiries and tickets.'
                                         : 'Create a vendor account and initialize their dedicated print shop.'}
                                 </p>
                             </div>
@@ -1144,7 +1314,7 @@ function AdminUsersAndVendorsContent() {
                             {/* Account Type Selector (Segmented) */}
                             <div style={{ marginBottom: '16px' }}>
                                 <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px' }}>Account Type *</label>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'var(--bg-secondary)', padding: '4px', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', background: 'var(--bg-secondary)', padding: '4px', borderRadius: '10px', border: '1px solid var(--border)' }}>
                                     <button
                                         type="button"
                                         onClick={() => setCreateRole('customer')}
@@ -1184,6 +1354,26 @@ function AdminUsersAndVendorsContent() {
                                         }}
                                     >
                                         <Store size={16} /> Vendor
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setCreateRole('support')}
+                                        style={{
+                                            padding: '8px 12px',
+                                            borderRadius: '8px',
+                                            border: 'none',
+                                            background: createRole === 'support' ? '#8b5cf6' : 'transparent',
+                                            color: createRole === 'support' ? '#fff' : 'var(--fg-muted)',
+                                            fontWeight: '700',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '6px',
+                                            transition: 'all 0.15s ease',
+                                        }}
+                                    >
+                                        <LifeBuoy size={16} /> Support
                                     </button>
                                 </div>
                             </div>
@@ -1414,11 +1604,11 @@ function AdminUsersAndVendorsContent() {
                                     className="btn btn-primary"
                                     disabled={createSubmitting}
                                     style={{
-                                        background: createRole === 'vendor' ? '#10b981' : undefined,
-                                        borderColor: createRole === 'vendor' ? '#10b981' : undefined,
+                                        background: createRole === 'vendor' ? '#10b981' : createRole === 'support' ? '#8b5cf6' : undefined,
+                                        borderColor: createRole === 'vendor' ? '#10b981' : createRole === 'support' ? '#8b5cf6' : undefined,
                                     }}
                                 >
-                                    {createSubmitting ? 'Creating...' : createRole === 'vendor' ? 'Create Vendor & Print Shop' : 'Create Customer'}
+                                    {createSubmitting ? 'Creating...' : createRole === 'vendor' ? 'Create Vendor & Print Shop' : createRole === 'support' ? 'Create Support Agent' : 'Create Customer'}
                                 </button>
                             </div>
                         </form>
@@ -1510,12 +1700,13 @@ function AdminUsersAndVendorsContent() {
                                     <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>Role</label>
                                     <select
                                         value={editRole}
-                                        onChange={e => setEditRole(e.target.value as 'customer' | 'vendor')}
+                                        onChange={e => setEditRole(e.target.value as 'customer' | 'vendor' | 'support')}
                                         className="input"
                                         style={{ width: '100%' }}
                                     >
                                         <option value="customer">Customer</option>
                                         <option value="vendor">Vendor</option>
+                                        <option value="support">Support</option>
                                     </select>
                                     <div style={{ fontSize: '11px', color: 'var(--fg-muted)', marginTop: '4px' }}>
                                         Administrator role cannot be assigned through this interface.
@@ -1652,13 +1843,61 @@ function AdminUsersAndVendorsContent() {
                             </button>
                         </div>
 
+                        {/* Deletion Request Alert Box */}
+                        {selectedUser.deleteRequest && (
+                            <div style={{
+                                padding: '12px 14px',
+                                borderRadius: '8px',
+                                background: 'rgba(239, 68, 68, 0.1)',
+                                border: '1px solid rgba(239, 68, 68, 0.3)',
+                                marginBottom: '16px',
+                            }}>
+                                <div style={{ fontWeight: '700', color: '#ef4444', fontSize: '13px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <AlertCircle size={15} /> Deletion Requested
+                                </div>
+                                <div style={{ fontSize: '12px', color: 'var(--fg)' }}>
+                                    <strong>Reason:</strong> {selectedUser.deleteRequest.reason}
+                                </div>
+                                <div style={{ fontSize: '11px', color: 'var(--fg-muted)', marginTop: '4px' }}>
+                                    Submitted on {new Date(selectedUser.deleteRequest.requested_at || selectedUser.deleteRequest.requestedAt || '').toLocaleDateString()}
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                                    <button
+                                        onClick={() => {
+                                            setIsDetailOpen(false);
+                                            handleApproveDeleteRequest(selectedUser);
+                                        }}
+                                        className="btn btn-sm"
+                                        style={{ background: '#ef4444', color: '#fff', fontSize: '11px', padding: '4px 10px', border: 'none' }}
+                                    >
+                                        Approve Deletion
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setIsDetailOpen(false);
+                                            handleRejectDeleteRequest(selectedUser);
+                                        }}
+                                        className="btn btn-outline btn-sm"
+                                        style={{ fontSize: '11px', padding: '4px 10px' }}
+                                    >
+                                        Reject Request
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px', fontSize: '13px' }}>
                             <div><strong>Name:</strong> {selectedUser.name || '—'}</div>
                             <div><strong>Email:</strong> {selectedUser.email || '—'}</div>
                             <div><strong>Phone:</strong> {selectedUser.phone || '—'}</div>
                             <div><strong>Role:</strong> <span style={{ textTransform: 'uppercase', fontWeight: '700' }}>{selectedUser.role}</span></div>
-                            <div><strong>Status:</strong> {selectedUser.isDisabled ? 'Disabled' : 'Active'}</div>
+                            <div><strong>Status:</strong> {selectedUser.deleteRequest ? 'Deletion Requested' : selectedUser.isDisabled ? 'Disabled' : 'Active'}</div>
                             <div><strong>Total Orders:</strong> {selectedUser.orderCount}</div>
+                            {selectedUser.linkedEmails && selectedUser.linkedEmails.length > 0 && (
+                                <div style={{ gridColumn: 'span 2' }}>
+                                    <strong>Linked Emails:</strong> {selectedUser.linkedEmails.join(', ')}
+                                </div>
+                            )}
                             <div style={{ gridColumn: 'span 2' }}>
                                 <strong>Shop:</strong> {selectedUser.assignedShop?.name || (selectedUser.shop as any)?.shopName || 'None assigned'}
                             </div>

@@ -34,26 +34,27 @@ pub use submission::{
 /// Query platform printing capabilities for the current OS.
 pub fn get_platform_capabilities() -> PlatformPrintingCapabilitiesResponse {
     let platform = std::env::consts::OS;
-    let is_macos = platform == "macos";
+    let is_supported = platform == "macos" || platform == "linux" || platform == "windows";
 
     PlatformPrintingCapabilitiesResponse {
         supports_silent_printing: false,
-        supports_job_cancellation: false,
-        supports_status_polling: is_macos,
-        platform: if is_macos {
-            "macos".to_string()
+        supports_job_cancellation: is_supported,
+        supports_status_polling: is_supported,
+        platform: if is_supported {
+            platform.to_string()
         } else {
             "unsupported".to_string()
         },
-        native_adapter_status: if is_macos {
+        native_adapter_status: if is_supported {
             "DISCOVERY_AND_CAPABILITIES_READY".to_string()
         } else {
             "UNSUPPORTED_PLATFORM".to_string()
         },
-        message: if is_macos {
-            "Native macOS CUPS printer discovery, capabilities, and print submission active.".to_string()
-        } else {
-            format!("Platform '{}' is not supported by native printer adapter yet.", platform)
+        message: match platform {
+            "macos" => "Native macOS CUPS printer discovery, capabilities, and print submission active.".to_string(),
+            "linux" => "Native Linux CUPS printer discovery, capabilities, and print submission active.".to_string(),
+            "windows" => "Native Windows Spooler printer discovery, capabilities, and print submission active.".to_string(),
+            _ => format!("Platform '{}' is not supported by native printer adapter yet.", platform),
         },
     }
 }

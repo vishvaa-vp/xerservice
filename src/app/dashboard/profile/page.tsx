@@ -9,6 +9,8 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import AvatarCropModal from '@/components/profile/AvatarCropModal';
 import LinkPhoneModal from '@/components/profile/LinkPhoneModal';
 import WhatsAppLinkModal from '@/components/profile/WhatsAppLinkModal';
+import LinkEmailModal from '@/components/profile/LinkEmailModal';
+import RequestDeleteModal from '@/components/profile/RequestDeleteModal';
 import { formatPhoneDisplay } from '@/lib/phone';
 import {
     Camera,
@@ -22,6 +24,8 @@ import {
     ExternalLink,
     Lock,
     Trash2,
+    Plus,
+    AlertTriangle,
 } from 'lucide-react';
 
 export default function ProfilePage() {
@@ -43,6 +47,20 @@ export default function ProfilePage() {
         linkedAt: string | null;
         orderUpdatesOptIn: boolean;
     }>({ status: 'not_linked', maskedPhone: null, linkedAt: null, orderUpdatesOptIn: false });
+
+    // Multi-email linking state
+    const [linkedEmails, setLinkedEmails] = useState<string[]>([]);
+    const [showLinkEmailModal, setShowLinkEmailModal] = useState(false);
+
+    // Account deletion governance state
+    const [deleteRequest, setDeleteRequest] = useState<{
+        status: string;
+        reason: string;
+        requested_at: string;
+    } | null>(null);
+    const [showRequestDeleteModal, setShowRequestDeleteModal] = useState(false);
+    const [cancellingDeleteRequest, setCancellingDeleteRequest] = useState(false);
+    const [cancelDeleteError, setCancelDeleteError] = useState<string | null>(null);
 
     const loadWhatsappStatus = useCallback(async () => {
         try {
@@ -66,9 +84,105 @@ export default function ProfilePage() {
         }
     }, []);
 
+    const loadLinkedEmails = useCallback(async () => {
+        try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            const token = sessionData?.session?.access_token;
+            if (!token) return;
+            const res = await fetch('/api/customer/account/linked-emails', {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setLinkedEmails(data.linkedEmails || []);
+            }
+        } catch {
+            // Non-fatal
+        }
+    }, []);
+
+    const loadDeleteRequestStatus = useCallback(async () => {
+        try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            const token = sessionData?.session?.access_token;
+            if (!token) return;
+            const res = await fetch('/api/customer/account/delete-request', {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setDeleteRequest(data.deleteRequest || null);
+            }
+        } catch {
+            // Non-fatal
+        }
+    }, []);
+
     useEffect(() => {
         loadWhatsappStatus();
-    }, [loadWhatsappStatus]);
+        loadLinkedEmails();
+        loadDeleteRequestStatus();
+    }, [loadWhatsappStatus, loadLinkedEmails, loadDeleteRequestStatus]);
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            const hash = window.location.hash;
+            if (params.get('connectWhatsapp') === '1' || hash === '#whatsapp-connect' || hash === '#connect-whatsapp') {
+                setShowWhatsappModal(true);
+            }
+        }
+    }, []);
+
+    const handleUnlinkEmail = async (emailToUnlink: string) => {
+        try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            const token = sessionData?.session?.access_token;
+            if (!token) return;
+            const res = await fetch('/api/customer/account/linked-emails', {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ email: emailToUnlink }),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setLinkedEmails(data.linkedEmails || []);
+            }
+        } catch {
+            // Non-fatal
+        }
+    };
+
+    const handleCancelDeleteRequest = async () => {
+        setCancellingDeleteRequest(true);
+        setCancelDeleteError(null);
+        try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            const token = sessionData?.session?.access_token;
+            if (!token) throw new Error('Not authenticated.');
+
+            const res = await fetch('/api/customer/account/delete-request', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ action: 'cancel' }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data.error || 'Failed to cancel deletion request.');
+            }
+            setDeleteRequest(null);
+        } catch (err: any) {
+            setCancelDeleteError(err?.message || 'Failed to cancel request.');
+        } finally {
+            setCancellingDeleteRequest(false);
+        }
+    };
     const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
     const [showCropModal, setShowCropModal] = useState(false);
     const [name, setName] = useState(user?.name || '');
@@ -219,6 +333,55 @@ export default function ProfilePage() {
                         <p style={{ fontSize: '15px', color: 'var(--fg-muted)' }}>Manage your account details.</p>
                     </div>
 
+                    {/* Pending Account Deletion Request Banner */}
+                    {deleteRequest && (
+                        <div
+                            style={{
+                                padding: '16px 20px',
+                                borderRadius: '12px',
+                                border: '1px solid rgba(245, 158, 11, 0.4)',
+                                background: 'rgba(245, 158, 11, 0.08)',
+                                marginBottom: '22px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '14px',
+                                flexWrap: 'wrap',
+                            }}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                                <AlertTriangle size={20} color="#b45309" style={{ flexShrink: 0, marginTop: '2px' }} />
+                                <div>
+                                    <h4 style={{ margin: '0 0 2px 0', fontSize: '14px', fontWeight: '800', color: '#b45309' }}>
+                                        Account Deletion Requested
+                                    </h4>
+                                    <p style={{ margin: 0, fontSize: '13px', color: 'var(--fg-muted)' }}>
+                                        Submitted on {new Date(deleteRequest.requested_at).toLocaleDateString()}. Reason: <strong>{deleteRequest.reason}</strong>. Pending administrative review.
+                                    </p>
+                                    {cancelDeleteError && (
+                                        <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#ef4444', fontWeight: '600' }}>
+                                            {cancelDeleteError}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleCancelDeleteRequest}
+                                disabled={cancellingDeleteRequest}
+                                className="btn btn-outline btn-sm"
+                                style={{
+                                    borderColor: 'rgba(180, 83, 9, 0.4)',
+                                    color: '#b45309',
+                                    fontWeight: '700',
+                                    borderRadius: '8px',
+                                }}
+                            >
+                                {cancellingDeleteRequest ? 'Cancelling...' : 'Cancel Deletion Request'}
+                            </button>
+                        </div>
+                    )}
+
                     <div className="card" style={{ padding: '34px', marginBottom: '22px', background: 'linear-gradient(135deg, var(--bg) 0%, var(--bg-secondary) 100%)' }}>
                         <div style={{ textAlign: 'center' }}>
                             <div style={{ width: '108px', height: '108px', borderRadius: '30px', margin: '0 auto 14px', overflow: 'hidden', border: '4px solid var(--bg)', boxShadow: 'var(--shadow-sm)', background: 'var(--accent-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -242,8 +405,59 @@ export default function ProfilePage() {
                                     </div>
                                     {email && (
                                         <div>
-                                            <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', textAlign: 'left', marginBottom: '4px' }}>Email Address</label>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                                <label style={{ fontSize: '13px', fontWeight: '700', textAlign: 'left' }}>Email Address</label>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowLinkEmailModal(true)}
+                                                    className="btn btn-outline btn-xs"
+                                                    style={{
+                                                        borderRadius: '12px',
+                                                        padding: '2px 8px',
+                                                        fontSize: '11px',
+                                                        fontWeight: '700',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '3px',
+                                                        borderColor: 'var(--accent)',
+                                                        color: 'var(--accent)',
+                                                    }}
+                                                    title="Link another Gmail / email address"
+                                                >
+                                                    <Plus size={12} /> Add Email
+                                                </button>
+                                            </div>
                                             <input className="input" type="email" value={email} disabled style={{ opacity: 0.7, cursor: 'not-allowed' }} title="Email address is linked to your login and cannot be modified directly" />
+                                            {linkedEmails.length > 0 && (
+                                                <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
+                                                    {linkedEmails.map(em => (
+                                                        <span
+                                                            key={em}
+                                                            style={{
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                gap: '4px',
+                                                                padding: '2px 8px',
+                                                                borderRadius: '12px',
+                                                                background: 'var(--bg-tertiary)',
+                                                                border: '1px solid var(--border)',
+                                                                fontSize: '11px',
+                                                                color: 'var(--fg)',
+                                                            }}
+                                                        >
+                                                            {em}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleUnlinkEmail(em)}
+                                                                style={{ background: 'transparent', border: 'none', color: 'var(--fg-muted)', cursor: 'pointer', padding: 0 }}
+                                                                title={`Unlink ${em}`}
+                                                            >
+                                                                ×
+                                                            </button>
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                     {profileError && (
@@ -259,8 +473,70 @@ export default function ProfilePage() {
                             ) : (
                                 <>
                                     <h2 style={{ fontSize: '28px', fontWeight: '900', letterSpacing: '-0.04em', marginBottom: '4px' }}>{user.name}</h2>
-                                    {user.email && (
-                                        <p style={{ fontSize: '14px', color: 'var(--fg-muted)', marginBottom: '12px' }}>{user.email}</p>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                                        {user.email && (
+                                            <span style={{ fontSize: '14px', color: 'var(--fg-muted)' }}>{user.email}</span>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowLinkEmailModal(true)}
+                                            className="btn btn-outline btn-xs"
+                                            style={{
+                                                borderRadius: '14px',
+                                                padding: '2px 8px',
+                                                fontSize: '11px',
+                                                fontWeight: '700',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '3px',
+                                                borderColor: 'var(--accent)',
+                                                color: 'var(--accent)',
+                                            }}
+                                            title="Link another Gmail / email address to merge with this mobile number"
+                                        >
+                                            <Plus size={12} /> Add Email
+                                        </button>
+                                    </div>
+                                    {linkedEmails.length > 0 && (
+                                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                                            <span style={{ fontSize: '12px', color: 'var(--fg-muted)', fontWeight: '600' }}>Linked:</span>
+                                            {linkedEmails.map(em => (
+                                                <span
+                                                    key={em}
+                                                    style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px',
+                                                        padding: '2px 8px',
+                                                        borderRadius: '12px',
+                                                        background: 'var(--bg-tertiary)',
+                                                        border: '1px solid var(--border)',
+                                                        fontSize: '12px',
+                                                        color: 'var(--fg)',
+                                                    }}
+                                                >
+                                                    {em}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleUnlinkEmail(em)}
+                                                        style={{
+                                                            background: 'transparent',
+                                                            border: 'none',
+                                                            color: 'var(--fg-muted)',
+                                                            cursor: 'pointer',
+                                                            padding: 0,
+                                                            fontSize: '12px',
+                                                            lineHeight: 1,
+                                                        }}
+                                                        title={`Unlink ${em}`}
+                                                        onMouseEnter={(e) => (e.currentTarget.style.color = '#ef4444')}
+                                                        onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--fg-muted)')}
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </span>
+                                            ))}
+                                        </div>
                                     )}
                                     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', marginBottom: '22px', flexWrap: 'wrap' }}>
                                         {user.mobile ? (
@@ -408,21 +684,71 @@ export default function ProfilePage() {
                                 <ChevronRight size={16} color="var(--fg-subtle)" />
                             </Link>
 
-                            <button onClick={() => setShowLogout(true)} style={{ padding: '20px 28px', display: 'flex', alignItems: 'center', gap: '16px', border: 'none', borderBottom: '1px solid var(--border)', background: 'rgba(239, 68, 68, 0.04)', width: '100%', textAlign: 'left', cursor: 'pointer' }}>
+                            <button
+                                onClick={() => setShowLogout(true)}
+                                style={{
+                                    padding: '18px 28px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '16px',
+                                    border: 'none',
+                                    background: 'transparent',
+                                    width: '100%',
+                                    textAlign: 'left',
+                                    cursor: 'pointer',
+                                    color: '#ef4444',
+                                    transition: 'background 0.15s ease',
+                                }}
+                                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.06)')}
+                                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                className="btn-ghost"
+                            >
                                 <LogOut size={18} color="#ef4444" />
                                 <span style={{ fontSize: '15px', fontWeight: '700', flex: 1, color: '#ef4444' }}>Sign Out from Session</span>
-                                <ChevronRight size={16} color="#ef4444" style={{ opacity: 0.6 }} />
-                            </button>
-
-                            <button onClick={() => { setDeleteError(null); setShowDeleteConfirm(true); }} style={{ padding: '20px 28px', display: 'flex', alignItems: 'center', gap: '16px', border: 'none', background: 'rgba(220, 38, 38, 0.08)', width: '100%', textAlign: 'left', cursor: 'pointer' }}>
-                                <Trash2 size={18} color="#dc2626" />
-                                <div style={{ flex: 1 }}>
-                                    <span style={{ fontSize: '15px', fontWeight: '700', color: '#dc2626', display: 'block' }}>Delete Account</span>
-                                    <span style={{ fontSize: '12px', color: 'var(--fg-muted)', display: 'block', marginTop: '2px' }}>Permanently remove personal data & close account</span>
-                                </div>
-                                <ChevronRight size={16} color="#dc2626" style={{ opacity: 0.6 }} />
+                                <ChevronRight size={16} color="#ef4444" />
                             </button>
                         </div>
+                    </div>
+
+                    <div style={{ textAlign: 'center', marginTop: '14px', marginBottom: '8px' }}>
+                        {deleteRequest?.status === 'PENDING' ? (
+                            <button
+                                type="button"
+                                onClick={handleCancelDeleteRequest}
+                                disabled={cancellingDeleteRequest}
+                                style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: '#b45309',
+                                    fontSize: '12px',
+                                    cursor: 'pointer',
+                                    textDecoration: 'underline',
+                                    padding: '6px 12px',
+                                    fontWeight: '700',
+                                }}
+                            >
+                                {cancellingDeleteRequest ? 'Cancelling Deletion Request...' : 'Cancel Account Deletion Request'}
+                            </button>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={() => setShowRequestDeleteModal(true)}
+                                style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: 'var(--fg-muted)',
+                                    fontSize: '12px',
+                                    cursor: 'pointer',
+                                    textDecoration: 'underline',
+                                    padding: '6px 12px',
+                                    transition: 'color 0.15s ease',
+                                }}
+                                onMouseEnter={(e) => (e.currentTarget.style.color = '#ef4444')}
+                                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--fg-muted)')}
+                            >
+                                Delete Account
+                            </button>
+                        )}
                     </div>
                 </div>
             </section>
@@ -437,6 +763,23 @@ export default function ProfilePage() {
                     }
                 }}
             />
+            <LinkEmailModal
+                open={showLinkEmailModal}
+                onClose={() => setShowLinkEmailModal(false)}
+                onSuccess={(newLinked) => {
+                    setLinkedEmails(newLinked);
+                }}
+                primaryEmail={user.email || ''}
+                currentEmails={linkedEmails}
+            />
+            <RequestDeleteModal
+                open={showRequestDeleteModal}
+                onClose={() => setShowRequestDeleteModal(false)}
+                onSuccess={(req) => {
+                    setDeleteRequest(req);
+                }}
+                userEmail={user.email}
+            />
             <ConfirmDialog
                 open={showUnlinkConfirm}
                 title="Disconnect WhatsApp?"
@@ -448,10 +791,22 @@ export default function ProfilePage() {
             />
             <WhatsAppLinkModal
                 open={showWhatsappModal}
-                onClose={() => setShowWhatsappModal(false)}
+                onClose={() => {
+                    setShowWhatsappModal(false);
+                    if (typeof window !== 'undefined' && window.location.search.includes('connectWhatsapp')) {
+                        const url = new URL(window.location.href);
+                        url.searchParams.delete('connectWhatsapp');
+                        window.history.replaceState({}, '', url.pathname + (url.search ? url.search : '') + url.hash);
+                    }
+                }}
                 onSuccess={async () => {
                     await loadWhatsappStatus();
                     if (refreshProfile) await refreshProfile();
+                    if (typeof window !== 'undefined' && window.location.search.includes('connectWhatsapp')) {
+                        const url = new URL(window.location.href);
+                        url.searchParams.delete('connectWhatsapp');
+                        window.history.replaceState({}, '', url.pathname + (url.search ? url.search : '') + url.hash);
+                    }
                 }}
             />
             <ConfirmDialog

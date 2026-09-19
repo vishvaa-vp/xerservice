@@ -168,8 +168,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ us
             }
 
             if (newRole !== undefined) {
-                if (newRole !== 'customer' && newRole !== 'vendor') {
-                    return NextResponse.json({ error: "Invalid role. Role must be 'customer' or 'vendor'." }, { status: 400 });
+                if (newRole !== 'customer' && newRole !== 'vendor' && newRole !== 'support') {
+                    return NextResponse.json({ error: "Invalid role. Role must be 'customer', 'vendor', or 'support'." }, { status: 400 });
                 }
                 updates.role = newRole;
             }

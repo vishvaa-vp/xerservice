@@ -14,6 +14,7 @@ import {
     Download,
     FileText,
     Layers,
+    Plus,
     Lock,
     RefreshCw,
     Settings2,
@@ -40,6 +41,7 @@ import {
     evaluatePaymentRetrySafety,
     type OrderDraft,
 } from '@/lib/recovery';
+import { parseShopProfileMetadata } from '@/lib/shop-profile';
 import styles from './review-pay.module.css';
 
 interface AuthoritativeQuote {
@@ -335,7 +337,7 @@ function ReviewAndPayPageContent() {
                     orderNumber: orderData.order_number,
                     shopId: orderData.shop_id,
                     shopName: shopInfo?.name || 'Print Shop',
-                    shopAddress: shopInfo?.description || undefined,
+                    shopAddress: (shopInfo?.description ? parseShopProfileMetadata(shopInfo.description).address : null) || undefined,
                     status: orderData.status,
                     totalAmount: Number(orderData.total_amount || 0),
                     files: parsedFiles,
@@ -513,7 +515,7 @@ function ReviewAndPayPageContent() {
         );
         if (next.some(document => documentPrintTotals(document).faces === 0)) {
             setEditError('The page range must be valid for every selected document.');
-            return;
+            return false;
         }
 
         try {
@@ -532,7 +534,7 @@ function ReviewAndPayPageContent() {
             }
         } catch (err) {
             setEditError(err instanceof Error ? err.message : 'Settings could not be saved.');
-            return;
+            return false;
         }
 
         setCurrentOrder(previous => ({ ...previous, ...summarizePrintDocuments(next) }));
@@ -543,6 +545,7 @@ function ReviewAndPayPageContent() {
         // Recalculate authoritative quote from server with updated settings
         loadAuthoritativeQuote(next);
         loadOrderFromDb();
+        return true;
     };
 
     // Check receipt availability on success
@@ -1080,21 +1083,26 @@ function ReviewAndPayPageContent() {
                                 </span>
                             </div>
 
-                            {/* Multi-document Switcher */}
-                            {documents.length > 1 && (
-                                <div className={styles.docSelectorRow}>
-                                    <select
-                                        className={styles.docSelect}
-                                        aria-label="Select preview document"
-                                        value={selectedIndex}
-                                        onChange={(e) => setSelectedIndex(Number(e.target.value))}
-                                    >
+                            {/* Every document is visible without opening a dropdown. */}
+                            {documents.length > 0 && (
+                                <div className={styles.docSelectorRow} role="group" aria-label="Choose a document to preview">
+                                    <p className={styles.docSelectorLabel} aria-live="polite">
+                                        Document {selectedIndex + 1} of {documents.length}
+                                    </p>
+                                    <div className={styles.docChoices}>
                                         {documents.map((doc, idx) => (
-                                            <option key={doc.id || idx} value={idx}>
-                                                File {idx + 1}: {doc.name} ({doc.pages} pages)
-                                            </option>
+                                            <button key={doc.id || idx} type="button"
+                                                className={styles.docChoice}
+                                                aria-pressed={selectedIndex === idx}
+                                                onClick={() => setSelectedIndex(idx)}>
+                                                <span className={styles.docNumber}>{idx + 1}</span>
+                                                <span className={styles.docInfo}>
+                                                    <strong>{doc.name}</strong>
+                                                    <span>{doc.pages} {doc.pages === 1 ? 'page' : 'pages'}{selectedIndex === idx ? ' · Selected' : ' · Tap to preview'}</span>
+                                                </span>
+                                            </button>
                                         ))}
-                                    </select>
+                                    </div>
                                 </div>
                             )}
 
@@ -1132,6 +1140,10 @@ function ReviewAndPayPageContent() {
                                     <Settings2 size={18} className={styles.cardTitleIcon} />
                                     Print Configuration
                                 </h2>
+                                <div className={styles.settingsActions}>
+                                    <Link href={uploadUrl} className={styles.editSettingsBtn}>
+                                        <Plus size={16} /> Add PDF
+                                    </Link>
                                 <button
                                     type="button"
                                     onClick={() => {
@@ -1139,10 +1151,10 @@ function ReviewAndPayPageContent() {
                                         else router.push(uploadUrl);
                                     }}
                                     className={styles.editSettingsBtn}
-                                    style={{ margin: 0 }}
                                 >
                                     <ArrowLeft size={14} /> Edit Settings
                                 </button>
+                                </div>
                             </div>
 
                             <div className={styles.printSettingsGrid}>
@@ -1346,6 +1358,7 @@ function ReviewAndPayPageContent() {
                     hasMultiple={documents.length > 1}
                     onClose={() => { setEditing(false); setEditError(''); }}
                     onSave={saveSettings}
+                    onAddFiles={() => router.push(uploadUrl)}
                     error={editError}
                     shopId={currentOrder.shopId || dbOrder?.shopId || dbOrder?.shopName}
                 />
