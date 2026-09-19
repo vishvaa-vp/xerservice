@@ -1,0 +1,9 @@
+[build]
+  base = ""
+  publish = ".next"
+  command = "pnpm run build"
+  SECRETS_SCAN_ENABLED = false
+
+[build.environment]
+  NODE_VERSION = "20"
+  SECRETS_SCAN_ENABLED = "false"
