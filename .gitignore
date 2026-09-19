@@ -74,3 +74,13 @@ releases/
 *.rpm
 *.msi
 *.exe
+
+# Excluded from GitHub repository (website-only repo; preserved locally on disk)
+apps/
+docs/
+scripts/test-desktop-*
+scripts/run-desktop-print-execution.ts
+scripts/test-stage-a8-desktop-shell.mjs
+scripts/test-cross-platform-printing.mjs
+
+
