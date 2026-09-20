@@ -38,6 +38,11 @@ export async function POST(req: NextRequest) {
 
         const result = await processIncomingWebhook(rawBody, signatureHeader);
 
+        console.info('[WhatsAppWebhook] Event processed:', {
+            processed: result.processed,
+            reason: result.reason,
+        });
+
         return NextResponse.json({ status: 'ok', ...result }, { status: 200, headers });
     } catch (err: unknown) {
         if (err instanceof WhatsAppServiceError) {
