@@ -1,9 +1,7 @@
 [build]
-  base = ""
-  publish = ".next"
   command = "pnpm run build"
-  SECRETS_SCAN_ENABLED = false
+  publish = ".next"
 
 [build.environment]
-  NODE_VERSION = "20"
+  NODE_VERSION = "22"
   SECRETS_SCAN_ENABLED = "false"
