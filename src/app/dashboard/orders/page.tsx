@@ -348,11 +348,11 @@ export default function OrdersPage() {
                                                 <Link href={`/order/upload?shop=${order.shop_id}`} style={{ fontSize: '20px', fontWeight: '800', marginBottom: '6px', letterSpacing: '-0.02em', display: 'inline-block', textDecoration: 'none' }}>
                                                     {order.shop?.name || 'Print Shop'}
                                                 </Link>
-                                                <p style={{ fontSize: '14px', color: 'var(--fg-muted)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '20px' }}>
+                                                <p className="order-filename" style={{ fontSize: '14px', color: 'var(--fg-muted)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '20px' }}>
                                                     <FileText size={14} /> {displayFileName}
                                                 </p>
 
-                                                <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                                                <div className="order-specs-grid" style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
                                                     {[
                                                         { label: 'Printable Pages', val: `${order.total_printable_pages}` },
                                                         { label: 'Physical Sheets', val: `${order.total_sheets}` },
@@ -369,13 +369,15 @@ export default function OrdersPage() {
                                             </div>
 
                                             <div className="orders-side" style={{ background: 'var(--bg-secondary)', padding: '28px', width: '220px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', borderLeft: '1px solid var(--border)', textAlign: 'center' }}>
-                                                <div style={{ fontSize: '28px', fontWeight: '900', letterSpacing: '-0.05em', color: 'var(--fg)', marginBottom: '4px' }}>{formatCurrency(Number(order.total_amount))}</div>
-                                                <div style={{ fontSize: '12px', color: 'var(--fg-subtle)', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '20px' }}>
-                                                    <Calendar size={12} />
-                                                    {new Date(order.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true })}
+                                                <div className="order-price-date-row">
+                                                    <div className="order-total-price" style={{ fontSize: '28px', fontWeight: '900', letterSpacing: '-0.05em', color: 'var(--fg)', marginBottom: '4px' }}>{formatCurrency(Number(order.total_amount))}</div>
+                                                    <div className="order-date" style={{ fontSize: '12px', color: 'var(--fg-subtle)', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '20px' }}>
+                                                        <Calendar size={12} />
+                                                        {new Date(order.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true })}
+                                                    </div>
                                                 </div>
                                                 {isDraft ? (
-                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                                                    <div className="order-actions-wrap" style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
                                                         <Link
                                                             href={`/order/upload?shop=${order.shop_id}`}
                                                             className="btn btn-accent btn-sm btn-full"
@@ -393,7 +395,7 @@ export default function OrdersPage() {
                                                         </button>
                                                     </div>
                                                 ) : (
-                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                                                    <div className="order-actions-wrap" style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
                                                         <button
                                                             className="btn btn-outline btn-sm btn-full"
                                                             style={{ background: 'var(--bg)' }}

@@ -433,7 +433,7 @@ function LoginPageContent() {
                             </button>
                         </form>
 
-                        {/* Mobile Number + OTP Login Option (Coming Soon when disabled) */}
+                        {/* Mobile Number + OTP Login Option (hidden per request)
                         <div className="login-phone-card" style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid var(--border)' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -502,6 +502,7 @@ function LoginPageContent() {
                                 </button>
                             )}
                         </div>
+                        */}
                     </div>
                 )}
 
@@ -599,6 +600,7 @@ function LoginPageContent() {
                     </div>
                 )}
 
+                {/* Mobile number step (hidden per request)
                 {step === 'mobile' && (
                     <div className="fade-in">
                         <button onClick={() => { setStep('choice'); setError(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-muted)', fontSize: '14px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '6px' }}><ArrowLeft size={16} /> Back</button>
@@ -654,7 +656,9 @@ function LoginPageContent() {
                         )}
                     </div>
                 )}
+                */}
 
+                {/* OTP verification step (hidden per request)
                 {step === 'otp' && (
                     <div className="fade-in">
                         <button onClick={() => { setStep('mobile'); setError(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-muted)', fontSize: '14px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '6px' }}><ArrowLeft size={16} /> Back</button>
@@ -699,6 +703,7 @@ function LoginPageContent() {
                         </form>
                     </div>
                 )}
+                */}
             </div>
             {showTerms && (
                 <div className="confirm-overlay" role="dialog" aria-modal="true" aria-labelledby="terms-title">

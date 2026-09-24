@@ -457,9 +457,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const addToCart = (item: Omit<CartItem, 'createdAt'> & Partial<Pick<CartItem, 'createdAt'>>) => {
         setCart(previous => {
-            const existing = item.orderId ? previous.find(entry => entry.orderId === item.orderId) : undefined;
+            const existing = item.orderId
+                ? previous.find(entry => entry.orderId === item.orderId)
+                : (item.source === 'whatsapp' ? previous.find(entry => entry.source === 'whatsapp' && entry.fileName === item.fileName) : undefined);
             const next = { ...item, createdAt: existing?.createdAt || item.createdAt || new Date().toISOString(), source: item.source || 'upload' as const };
-            return existing ? previous.map(entry => entry.orderId === item.orderId ? next : entry) : [...previous, next];
+            return existing ? previous.map(entry => entry === existing ? next : entry) : [...previous, next];
         });
     };
     const removeFromCart = (idx: number) => setCart(prev => prev.filter((_, i) => i !== idx));

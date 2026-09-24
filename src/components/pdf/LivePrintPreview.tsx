@@ -152,7 +152,6 @@ export default function LivePrintPreview({ file, pageCount, settings, review = f
 
     return (
         <div className={styles.root} aria-label="Live print preview" aria-busy={updating && !error}>
-            <div className={styles.heading}><strong>Live preview</strong><span>{settings.paperSize.toUpperCase()} · {settings.color === 'bw' ? 'B&W' : 'Color'}</span></div>
             <div className={styles.toolbar}>
                 <button type="button" title="Previous sheet" aria-label="Previous sheet" disabled={currentSheet === 0 || !sheetCount} onClick={() => { setSheet(currentSheet - 1); setBack(false); }}><ChevronLeft size={18} /></button>
                 <span>Sheet {sheetCount ? currentSheet + 1 : 0} of {sheetCount}</span>

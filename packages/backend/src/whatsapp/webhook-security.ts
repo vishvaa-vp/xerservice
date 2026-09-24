@@ -4,22 +4,12 @@ export function hashChallengeToken(token: string): string {
     return crypto.createHash('sha256').update(token.trim()).digest('hex');
 }
 
-/** Verifies Meta's HMAC-SHA256 signature without accepting fallback secrets. */
+/** Verifies Meta's HMAC-SHA256 signature against configured candidate app secrets. */
 export function verifyWhatsAppWebhookSignature(
     rawBody: string,
     signatureHeader: string | null,
     secretOverride?: string
 ): boolean {
-    const secret = secretOverride ||
-        process.env.META_APP_SECRET ||
-        process.env.WHATSAPP_APP_SECRET ||
-        process.env.WHATSAPP_WEBHOOK_SECRET;
-
-    if (!secret) {
-        console.warn('[WhatsAppWebhook] Signature verification failed: app secret is missing.');
-        return false;
-    }
-
     if (!signatureHeader) {
         console.warn('[WhatsAppWebhook] Signature verification failed: x-hub-signature-256 header is missing.');
         return false;
@@ -37,19 +27,40 @@ export function verifyWhatsAppWebhookSignature(
         return false;
     }
 
-    try {
-        const expectedHash = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
-        const signature = Buffer.from(signatureHash, 'hex');
-        const expected = Buffer.from(expectedHash, 'hex');
-        const matches = signature.length === expected.length && crypto.timingSafeEqual(signature, expected);
+    const rawCandidates: (string | undefined)[] = secretOverride
+        ? [secretOverride]
+        : [
+            process.env.META_APP_SECRET,
+            process.env.WHATSAPP_APP_SECRET,
+            process.env.WHATSAPP_WEBHOOK_SECRET,
+            process.env.META_APP_SECRET_FALLBACK,
+            process.env.OLD_META_APP_SECRET,
+        ];
 
-        if (!matches) {
-            console.warn('[WhatsAppWebhook] Signature verification failed: signature does not match the configured app secret.');
-        }
+    const secrets = rawCandidates
+        .filter((s): s is string => Boolean(s && s.trim()))
+        .flatMap((s) => s.split(',').map((x) => x.trim()))
+        .filter((s) => s.length > 0);
 
-        return matches;
-    } catch (error) {
-        console.warn('[WhatsAppWebhook] Signature verification failed: verification error.', error);
+    if (secrets.length === 0) {
+        console.warn('[WhatsAppWebhook] Signature verification failed: app secret is missing.');
         return false;
     }
+
+    const signature = Buffer.from(signatureHash, 'hex');
+
+    for (const secret of secrets) {
+        try {
+            const expectedHash = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+            const expected = Buffer.from(expectedHash, 'hex');
+            if (signature.length === expected.length && crypto.timingSafeEqual(signature, expected)) {
+                return true;
+            }
+        } catch (error) {
+            console.warn('[WhatsAppWebhook] Candidate signature verification error.', error);
+        }
+    }
+
+    console.warn('[WhatsAppWebhook] Signature verification failed: signature does not match configured app secret(s).');
+    return false;
 }

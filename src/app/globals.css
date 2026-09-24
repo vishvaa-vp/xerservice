@@ -610,39 +610,41 @@ select {
 
 /* ─── Spinner & Loading Indicators ─── */
 .spinner {
-  width: 20px;
-  height: 20px;
-  border: 2px solid var(--border);
+  display: inline-block !important;
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--accent-muted, rgba(84, 189, 206, 0.2));
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: spin 0.65s linear infinite;
+  animation: spin 0.75s linear infinite;
   flex-shrink: 0;
   will-change: transform;
   transform: translateZ(0);
+  box-sizing: border-box;
 }
 
 .spinner-xs {
-  width: 12px;
-  height: 12px;
-  border-width: 1.5px;
+  width: 14px !important;
+  height: 14px !important;
+  border-width: 2px !important;
 }
 
 .spinner-sm {
-  width: 16px;
-  height: 16px;
-  border-width: 2px;
+  width: 18px !important;
+  height: 18px !important;
+  border-width: 2px !important;
 }
 
 .spinner-md {
-  width: 24px;
-  height: 24px;
-  border-width: 2.5px;
+  width: 32px !important;
+  height: 32px !important;
+  border-width: 3px !important;
 }
 
 .spinner-lg {
-  width: 40px;
-  height: 40px;
-  border-width: 3px;
+  width: 44px !important;
+  height: 44px !important;
+  border-width: 3.5px !important;
 }
 
 @keyframes spin {

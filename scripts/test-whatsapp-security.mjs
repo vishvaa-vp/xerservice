@@ -20,7 +20,21 @@ const previousSecrets = {
 delete process.env.META_APP_SECRET;
 delete process.env.WHATSAPP_APP_SECRET;
 delete process.env.WHATSAPP_WEBHOOK_SECRET;
+delete process.env.META_APP_SECRET_FALLBACK;
+delete process.env.OLD_META_APP_SECRET;
 assert.equal(verifyWhatsAppWebhookSignature(payload, signature), false, 'webhook verification must fail closed');
+
+// Candidate secrets test: comma-delimited
+process.env.META_APP_SECRET = `wrong-secret,${testSecret}`;
+assert.equal(verifyWhatsAppWebhookSignature(payload, signature), true, 'should match second secret in comma list');
+
+// Candidate secrets test: fallback env
+process.env.META_APP_SECRET = 'wrong-secret';
+process.env.META_APP_SECRET_FALLBACK = testSecret;
+assert.equal(verifyWhatsAppWebhookSignature(payload, signature), true, 'should match fallback secret');
+
+delete process.env.META_APP_SECRET;
+delete process.env.META_APP_SECRET_FALLBACK;
 
 const serviceSource = readFileSync(new URL('../packages/backend/src/whatsapp/whatsapp-service.ts', import.meta.url), 'utf8');
 const mediaSource = readFileSync(new URL('../packages/backend/src/whatsapp/media-service.ts', import.meta.url), 'utf8');

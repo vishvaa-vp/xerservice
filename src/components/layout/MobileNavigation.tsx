@@ -3,7 +3,7 @@
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FileText, Plus, Wallet, User, MessageCircle } from 'lucide-react';
+import { FileText, Wallet, User, MessageCircle, Store } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 
 function MobileNavigationInner() {
@@ -15,7 +15,7 @@ function MobileNavigationInner() {
     const tabs = [
         { label: 'WA Files', href: authHref('/dashboard/whatsapp'), Icon: MessageCircle, active: pathname === '/dashboard/whatsapp', isProfile: false, isPrintAction: false },
         { label: 'Orders', href: authHref('/dashboard/orders'), Icon: FileText, active: pathname === '/dashboard/orders', isProfile: false, isPrintAction: false },
-        { label: 'Print', href: '/order/upload', Icon: Plus, active: pathname.startsWith('/order/'), isProfile: false, isPrintAction: true },
+        { label: 'Shops', href: '/', Icon: Store, active: pathname === '/', isProfile: false, isPrintAction: true },
         { label: 'Wallet', href: authHref('/dashboard/wallet'), Icon: Wallet, active: pathname === '/dashboard/wallet', isProfile: false, isPrintAction: false },
         { label: 'Profile', href: authHref('/dashboard/profile'), Icon: User, active: pathname === '/dashboard/profile', isProfile: true, isPrintAction: false },
     ];
@@ -31,11 +31,11 @@ function MobileNavigationInner() {
                             key={label}
                             href={href}
                             className="mobile-print-action"
-                            aria-label="Print Document"
+                            aria-label={label}
                             aria-current={active ? 'page' : undefined}
                         >
                             <span className="mobile-print-icon"><Icon size={20} /></span>
-                            <span className="mobile-print-label">Print</span>
+                            <span className="mobile-print-label">{label}</span>
                         </Link>
                     );
                 }
