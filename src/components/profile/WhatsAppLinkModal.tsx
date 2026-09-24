@@ -138,11 +138,21 @@ export default function WhatsAppLinkModal({
     }, [onSuccess, stopPolling]);
 
     useEffect(() => {
-        if (step !== 'send_message' || secondsLeft <= 0) return;
+        if (step !== 'send_message') return;
 
+        // Check immediately, then poll every 2.5 seconds. Do not depend on
+        // secondsLeft here: it changes every second and would clear the
+        // interval before the first poll can run.
+        void checkStatus();
         pollingIntervalRef.current = setInterval(checkStatus, 2500);
         return () => stopPolling();
-    }, [step, secondsLeft, checkStatus, stopPolling]);
+    }, [step, checkStatus, stopPolling]);
+
+    useEffect(() => {
+        if (secondsLeft <= 0) {
+            stopPolling();
+        }
+    }, [secondsLeft, stopPolling]);
 
     useEffect(() => {
         if (step !== 'send_message' && step !== 'confirm') return;
