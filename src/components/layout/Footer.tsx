@@ -15,7 +15,7 @@ export default function Footer() {
 
     const links = [
         { group: 'Platform', items: [{ href: '/', label: 'Print Shops' }, { href: '/cart', label: 'Cart' }] },
-        { group: 'Company', items: [{ href: '/contact', label: 'Contact' }, { href: '/terms', label: 'Terms & Privacy' }] },
+        { group: 'Company', items: [{ href: '/contact', label: 'Contact' }, { href: '/terms', label: 'Terms & Conditions' }, { href: '/privacy-policy', label: 'Privacy Policy' }] },
     ];
 
     return (
